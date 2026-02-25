@@ -1,7 +1,8 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { NodeData } from '@/stores/workflowStore';
+import { useExecutionStore } from '@/stores/executionStore';
 import {
-  Zap, Globe, GitBranch, Printer, Clock, Settings, Merge,
+  Zap, Globe, GitBranch, Printer, Clock, Settings, Merge, Loader2
 } from 'lucide-react';
 
 const categoryColors: Record<string, string> = {
@@ -24,25 +25,35 @@ const typeIcons: Record<string, React.ComponentType<{ size?: number; color?: str
   merge: Merge,
 };
 
-export function WorkflowNode({ data, selected }: NodeProps) {
+export function WorkflowNode({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as NodeData;
+  const runningNode = useExecutionStore(state => state.runningNode);
+  const isRunning = runningNode === id;
   const color = categoryColors[nodeData.category] || 'var(--color-accent)';
   const Icon = typeIcons[nodeData.type] || Settings;
   const isLogicNode = nodeData.category === 'logic' && nodeData.type !== 'merge';
 
   return (
-    <div
-      style={{
-        background: 'var(--color-surface)',
-        border: `1px solid ${selected ? color : 'var(--color-border)'}`,
-        borderRadius: 'var(--radius-lg)',
-        padding: '0',
-        minWidth: 220,
-        boxShadow: selected ? `0 0 0 1px ${color}, 0 8px 24px rgba(0,0,0,0.6)` : '0 4px 12px rgba(0,0,0,0.3)',
-        opacity: nodeData.disabled ? 0.5 : 1,
-        transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)',
-      }}
-    >
+      <div
+        style={{
+          background: 'var(--color-surface)',
+          border: `1px solid ${selected ? color : isRunning ? color : 'var(--color-border)'}`,
+          borderRadius: 'var(--radius-lg)',
+          padding: '0',
+          minWidth: 220,
+          boxShadow: isRunning 
+            ? `0 0 0 2px ${color}80, 0 8px 32px ${color}40` 
+            : selected 
+              ? `0 0 0 1px ${color}, 0 8px 24px rgba(0,0,0,0.6)` 
+              : '0 4px 12px rgba(0,0,0,0.3)',
+          opacity: nodeData.disabled ? 0.5 : 1,
+          transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          transform: isRunning ? 'scale(1.02)' : 'scale(1)',
+          zIndex: isRunning ? 100 : selected ? 10 : 1,
+          position: 'relative',
+          animation: isRunning ? 'glow-pulse 1.5s infinite ease-in-out' : 'none',
+        }}
+      >
       {/* Input handle */}
         <Handle
           type="target"
@@ -105,8 +116,12 @@ export function WorkflowNode({ data, selected }: NodeProps) {
 
       {/* Status bar */}
       <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div style={{ width: 6, height: 6, borderRadius: '50%', background: nodeData.disabled ? 'var(--color-text-muted)' : 'var(--color-success)' }} />
-        {nodeData.disabled ? 'Disabled' : 'Ready'}
+        {isRunning ? (
+           <Loader2 size={12} className="animate-spin" style={{ color }} />
+        ) : (
+           <div style={{ width: 6, height: 6, borderRadius: '50%', background: nodeData.disabled ? 'var(--color-text-muted)' : 'var(--color-success)' }} />
+        )}
+        {isRunning ? 'Running...' : nodeData.disabled ? 'Disabled' : 'Ready'}
       </div>
 
       {/* Output handles */}

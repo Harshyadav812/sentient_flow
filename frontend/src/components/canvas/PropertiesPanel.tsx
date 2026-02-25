@@ -1,19 +1,70 @@
+import { useState } from 'react';
 import { useWorkflowStore } from '@/stores/workflowStore';
-import { X, Trash2 } from 'lucide-react';
+import { X, Trash2, Plus, Code, List } from 'lucide-react';
+import { NODE_DEFINITIONS } from '@/config/nodeDefinitions';
 
 export function PropertiesPanel() {
   const { selectedNode, updateNodeData, removeNode, selectNode } =
     useWorkflowStore();
+
+  const [isRawMode, setIsRawMode] = useState(false);
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
 
   if (!selectedNode) return null;
 
   const data = selectedNode.data;
   const params = (data.parameters || {}) as Record<string, unknown>;
 
-  const handleParamChange = (key: string, value: string) => {
+  const def = NODE_DEFINITIONS[data.type];
+  const schemaProps = def?.properties || [];
+  const mappedKeys = new Set(schemaProps.map(p => p.name));
+  const extraParamKeys = Object.keys(params).filter(k => !mappedKeys.has(k));
+
+  const handleParamChange = (key: string, value: unknown) => {
     updateNodeData(selectedNode.id, {
+      ...data,
       parameters: { ...params, [key]: value },
     });
+  };
+
+  const handleParamBlur = (key: string, value: string) => {
+    if (value.trim() === '') return;
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed !== 'string') {
+        updateNodeData(selectedNode.id, {
+          ...data,
+          parameters: { ...params, [key]: parsed },
+        });
+      }
+    } catch {
+      // Valid string, leaves as string
+    }
+  };
+
+  const handleAddParam = () => {
+    if (!newKey.trim()) return;
+    let finalValue: unknown = newValue;
+    try {
+      if (newValue.trim() !== '') {
+        finalValue = JSON.parse(newValue);
+      }
+    } catch {
+      finalValue = newValue;
+    }
+    updateNodeData(selectedNode.id, {
+      ...data,
+      parameters: { ...params, [newKey.trim()]: finalValue },
+    });
+    setNewKey('');
+    setNewValue('');
+  };
+
+  const handleRemoveParam = (k: string) => {
+    const nextParams = { ...params };
+    delete nextParams[k];
+    updateNodeData(selectedNode.id, { ...data, parameters: nextParams });
   };
 
   return (
@@ -85,27 +136,182 @@ export function PropertiesPanel() {
         </div>
 
         {/* Parameters */}
-        <div style={{ marginBottom: 8 }}>
-          <label style={labelStyle}>Parameters (JSON)</label>
-          <textarea
-            value={JSON.stringify(params, null, 2)}
-            onChange={(e) => {
-              try {
-                const parsed = JSON.parse(e.target.value);
-                updateNodeData(selectedNode.id, { parameters: parsed });
-              } catch {
-                // Allow partial editing — only update on valid JSON
-              }
-            }}
-            rows={8}
-            style={{
-              ...inputStyle,
-              resize: 'vertical',
-              fontFamily: 'monospace',
-              fontSize: 12,
-              lineHeight: 1.5,
-            }}
-          />
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>Parameters</label>
+            <button
+              onClick={() => setIsRawMode(!isRawMode)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--color-accent)',
+                cursor: 'pointer',
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: 0,
+              }}
+            >
+              {isRawMode ? <List size={14} /> : <Code size={14} />}
+              {isRawMode ? 'UI Editor' : 'Raw JSON'}
+            </button>
+          </div>
+
+          {isRawMode ? (
+            <textarea
+              value={JSON.stringify(params, null, 2)}
+              onChange={(e) => {
+                try {
+                  const parsed = JSON.parse(e.target.value);
+                  updateNodeData(selectedNode.id, { parameters: parsed });
+                } catch {
+                  // Allow partial editing — only update on valid JSON
+                }
+              }}
+              rows={8}
+              style={{
+                ...inputStyle,
+                resize: 'vertical',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            />
+          ) : (
+            <div style={{ background: 'var(--color-background)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 12 }}>
+              
+              {/* Render Schema-defined Properties */}
+              {schemaProps.map((prop) => {
+                const value = params[prop.name] ?? prop.default;
+                return (
+                  <div key={prop.name} style={{ marginBottom: 16 }}>
+                    <label style={labelStyle}>{prop.displayName}</label>
+                    {prop.type === 'options' && (
+                      <select
+                        value={String(value)}
+                        onChange={(e) => handleParamChange(prop.name, e.target.value)}
+                        style={inputStyle}
+                      >
+                        {prop.options?.map((opt) => (
+                          <option key={String(opt.value)} value={String(opt.value)}>
+                            {opt.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {prop.type === 'boolean' && (
+                      <input
+                        type="checkbox"
+                        checked={!!value}
+                        onChange={(e) => handleParamChange(prop.name, e.target.checked)}
+                        style={{ accentColor: 'var(--color-accent)' }}
+                      />
+                    )}
+                    {prop.type === 'number' && (
+                      <input
+                        type="number"
+                        value={value as number}
+                        onChange={(e) => handleParamChange(prop.name, parseFloat(e.target.value))}
+                        style={inputStyle}
+                      />
+                    )}
+                    {prop.type === 'string' && (
+                      <input
+                        type="text"
+                        value={value as string}
+                        onChange={(e) => handleParamChange(prop.name, e.target.value)}
+                        style={inputStyle}
+                      />
+                    )}
+                    {(prop.type === 'json' || prop.type === 'json-array') && (
+                      <textarea
+                        value={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                        onChange={(e) => handleParamChange(prop.name, e.target.value)}
+                        onBlur={(e) => handleParamBlur(prop.name, e.target.value)}
+                        style={{
+                          ...inputStyle,
+                          resize: 'vertical',
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          minHeight: 60,
+                        }}
+                      />
+                    )}
+                    {prop.description && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                        {prop.description}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Render Extra / Custom Parameters */}
+              {extraParamKeys.length > 0 && (
+                <div style={{ marginTop: schemaProps.length > 0 ? 16 : 0, borderTop: schemaProps.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: schemaProps.length > 0 ? 12 : 0 }}>
+                  <label style={{ ...labelStyle, marginBottom: 8 }}>Additional Parameters</label>
+                  {extraParamKeys.map((k) => {
+                    const v = params[k];
+                    return (
+                      <div key={k} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                        <div style={{ flex: 1, fontSize: 13, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={k}>
+                          {k}
+                        </div>
+                        <input
+                          value={typeof v === 'string' ? v : JSON.stringify(v)}
+                          onChange={(e) => handleParamChange(k, e.target.value)}
+                          onBlur={(e) => handleParamBlur(k, e.target.value)}
+                          style={{ ...inputStyle, flex: 2, padding: '6px 8px', fontSize: 13 }}
+                        />
+                        <button
+                          onClick={() => handleRemoveParam(k)}
+                          style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 4 }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add New Parameter Form */}
+              <div style={{ display: 'flex', gap: 8, marginTop: schemaProps.length > 0 && extraParamKeys.length === 0 ? 16 : 12, borderTop: schemaProps.length > 0 && extraParamKeys.length === 0 ? '1px solid var(--color-border)' : 'none', paddingTop: schemaProps.length > 0 && extraParamKeys.length === 0 ? 12 : 0 }}>
+                <input
+                  placeholder="New Key"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  style={{ ...inputStyle, flex: 1, padding: '6px 8px', fontSize: 13 }}
+                />
+                <input
+                  placeholder="Value"
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddParam()}
+                  style={{ ...inputStyle, flex: 1, padding: '6px 8px', fontSize: 13 }}
+                />
+                <button
+                  onClick={handleAddParam}
+                  disabled={!newKey.trim()}
+                  style={{
+                    background: newKey.trim() ? 'var(--color-text-primary)' : 'var(--color-surface-active)',
+                    color: 'var(--color-background)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: newKey.trim() ? 'pointer' : 'not-allowed',
+                    padding: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Disabled toggle */}
@@ -130,46 +336,7 @@ export function PropertiesPanel() {
           </span>
         </div>
 
-        {/* Quick parameter fields for known types */}
-        {data.type === 'http' && (
-          <>
-            <div style={{ marginBottom: 12 }}>
-              <label style={labelStyle}>URL</label>
-              <input
-                value={(params.url as string) || ''}
-                onChange={(e) => handleParamChange('url', e.target.value)}
-                placeholder="https://api.example.com"
-                style={inputStyle}
-              />
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={labelStyle}>Method</label>
-              <select
-                value={(params.method as string) || 'GET'}
-                onChange={(e) => handleParamChange('method', e.target.value)}
-                style={inputStyle}
-              >
-                <option>GET</option>
-                <option>POST</option>
-                <option>PUT</option>
-                <option>PATCH</option>
-                <option>DELETE</option>
-              </select>
-            </div>
-          </>
-        )}
 
-        {data.type === 'delay' && (
-          <div style={{ marginBottom: 12 }}>
-            <label style={labelStyle}>Seconds</label>
-            <input
-              type="number"
-              value={(params.seconds as number) || 1}
-              onChange={(e) => handleParamChange('seconds', e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-        )}
       </div>
 
       {/* Delete button */}

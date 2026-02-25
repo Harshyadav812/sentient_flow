@@ -116,3 +116,14 @@ export async function runWorkflowById(id: string) {
 export async function getCredentials() {
   return request<{ id: string; name: string; type: string }[]>('/credentials/');
 }
+
+export async function createCredential(payload: { name: string; type: string; data: Record<string, unknown> }) {
+  return request<{ id: string; name: string; type: string }>('/credentials/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCredential(id: string) {
+  return request(`/credentials/${id}`, { method: 'DELETE' });
+}

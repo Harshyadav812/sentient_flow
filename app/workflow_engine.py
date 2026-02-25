@@ -1,6 +1,7 @@
 import json
+import asyncio
 from collections import deque
-from typing import Any
+from typing import Any, AsyncGenerator
 from uuid import UUID
 
 from sqlmodel import Session
@@ -167,14 +168,20 @@ class WorkflowEngine:
         msg = f"Unknown task type: {node_type}"
         raise ValueError(msg)
 
-    async def run(self):
-        # Trigger the workflow by injecting an empty dict into the start node's buffer
+    async def run_stream(self) -> AsyncGenerator[str, None]:
         if not self.start_node_name:
-            raise ValueError("Invalid Workflow: No 'manual_trigger' node found.")
+            yield (
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "Invalid Workflow: No 'manual_trigger' node found.",
+                    }
+                )
+                + "\n"
+            )
+            return
 
         self.input_buffer[self.start_node_name].append({})
-
-        # Tuple: (NodeName, InputData)
         self.queue.append(
             (self.start_node_name, self.input_buffer[self.start_node_name])
         )
@@ -182,53 +189,56 @@ class WorkflowEngine:
         while self.queue:
             current_node_name, buffered_inputs = self.queue.popleft()
 
-            print(f"Executing {current_node_name}")
+            # Send node start event
+            yield json.dumps({"type": "node_start", "node": current_node_name}) + "\n"
 
-            # 1. Determine if this node is entirely skipped
-            # A node is skipped if ALL of its required inputs are SKIP_SIGNALS
+            # Brief visual delay for demo purposes (half a second)
+            await asyncio.sleep(0.5)
+
             is_skipped = all(i == SKIP_SIGNAL for i in buffered_inputs)
-
             if is_skipped:
                 self.execution_state[current_node_name] = {"status": "skipped"}
-
-                # Propagate the skip siganl to all children
                 for child in self.get_all_children(current_node_name):
                     self.input_buffer[child].append(SKIP_SIGNAL)
                     if len(self.input_buffer[child]) == self.in_degree[child]:
                         self.queue.append((child, self.input_buffer[child]))
                 continue
 
-            # 2. Prepare actual input for the handler
-            # Filter out skip signals so the Merge node only processes actual data
             valid_inputs = [i for i in buffered_inputs if i != SKIP_SIGNAL]
-
             node_type = self.node_map[current_node_name].type
             is_merge_node = "merge" in node_type
 
-            # Merge nodes receive the full list of inputs.
-            # Standard nodes receive just the first valid input dictionary.
             if is_merge_node:
                 input_data = valid_inputs
             else:
                 input_data = valid_inputs[0] if valid_inputs else {}
 
             try:
-                # 3. Execute the node
                 execution_result = await self.execute_node(
                     current_node_name, input_data
                 )
-
                 self.execution_state[current_node_name] = execution_result["result"]
                 output_index = execution_result["output_index"]
 
-                # 4. Route successful execution to active children
+                # Send node end event with partial result
+                yield (
+                    json.dumps(
+                        {
+                            "type": "node_end",
+                            "node": current_node_name,
+                            "status": "success",
+                            "result": execution_result["result"],
+                        }
+                    )
+                    + "\n"
+                )
+
                 active_nodes = self.get_next_nodes(current_node_name, output_index)
                 for name in active_nodes:
                     self.input_buffer[name].append(execution_result["result"])
                     if len(self.input_buffer[name]) == self.in_degree[name]:
                         self.queue.append((name, self.input_buffer[name]))
 
-                # 5. Propagate SKIP_SIGNAL to unselected branches (e.g the False path of an IF node)
                 skipped_nodes = self.get_skipped_nodes(current_node_name, output_index)
                 for name in skipped_nodes:
                     self.input_buffer[name].append(SKIP_SIGNAL)
@@ -236,23 +246,33 @@ class WorkflowEngine:
                         self.queue.append((name, self.input_buffer[name]))
 
             except Exception as e:
-                self.execution_state[current_node_name] = {
-                    "error": f"{type(e).__name__}: {str(e)}"
-                }
-                # Propagate failure so downstream nodes aren't stuck waiting
+                err_msg = f"{type(e).__name__}: {str(e)}"
+                self.execution_state[current_node_name] = {"error": err_msg}
+
+                yield (
+                    json.dumps(
+                        {
+                            "type": "node_end",
+                            "node": current_node_name,
+                            "status": "error",
+                            "error": err_msg,
+                        }
+                    )
+                    + "\n"
+                )
+
                 for child in self.get_all_children(current_node_name):
                     self.input_buffer[child].append(SKIP_SIGNAL)
                     if len(self.input_buffer[child]) == self.in_degree[child]:
                         self.queue.append((child, self.input_buffer[child]))
 
-        # check if cycle exists in the workflow (A -> B -> A)
         executed_nodes = set(self.execution_state.keys())
         all_nodes = set(self.node_map.keys())
         stuck_nodes = all_nodes - executed_nodes
         if stuck_nodes:
             for name in stuck_nodes:
-                self.execution_state[name] = {
-                    "error": "Node never executed (possible cycle or missing input)"
-                }
+                self.execution_state[name] = {"error": "Node never executed"}
 
-        return self.execution_state
+        yield (
+            json.dumps({"type": "workflow_end", "results": self.execution_state}) + "\n"
+        )

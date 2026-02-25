@@ -8,7 +8,9 @@ import {
   deleteWorkflow,
   type WorkflowData,
 } from '@/lib/api';
-import { Plus, Trash2, LogOut, Play, Workflow } from 'lucide-react';
+import { Plus, Trash2, LogOut, Play, Workflow, Key, Upload } from 'lucide-react';
+import { CredentialsModal } from '@/components/CredentialsModal';
+import { ImportWorkflowModal } from '@/components/ImportWorkflowModal';
 
 export function DashboardPage() {
   const { user, logout } = useAuthStore();
@@ -16,6 +18,8 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<WorkflowData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showCredentials, setShowCredentials] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => {
     loadWorkflows();
@@ -135,10 +139,18 @@ export function DashboardPage() {
           <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>
             My Workflows
           </h1>
-          <button onClick={handleCreate} style={primaryBtnStyle}>
-            <Plus size={16} />
-            New Workflow
-          </button>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button onClick={() => setShowCredentials(true)} style={topBtnStyle}>
+              <Key size={14} /> Credentials
+            </button>
+            <button onClick={() => setShowImport(true)} style={topBtnStyle}>
+              <Upload size={14} /> Import JSON
+            </button>
+            <button onClick={handleCreate} style={primaryBtnStyle}>
+              <Plus size={16} />
+              New Workflow
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -250,6 +262,14 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+      
+      {showCredentials && <CredentialsModal onClose={() => setShowCredentials(false)} />}
+      {showImport && (
+        <ImportWorkflowModal 
+          onClose={() => setShowImport(false)} 
+          onSuccess={loadWorkflows} 
+        />
+      )}
     </div>
   );
 }

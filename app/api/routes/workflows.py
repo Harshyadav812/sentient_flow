@@ -1,7 +1,9 @@
+import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -18,6 +20,18 @@ from app.workflow_engine import WorkflowEngine
 router = APIRouter()
 
 
+@router.post("/execute/stream")
+async def execute_workflow_stream(
+    payload: WorkflowPayload, current_user: CurrentUser, session: SessionDep
+):
+    workflow_engine = WorkflowEngine(
+        workflow=payload, session=session, user_id=current_user.id
+    )
+    return StreamingResponse(
+        workflow_engine.run_stream(), media_type="text/event-stream"
+    )
+
+
 @router.post("/execute", response_model=ExecuteResponse)
 async def execute_workflow(
     payload: WorkflowPayload, current_user: CurrentUser, session: SessionDep
@@ -26,7 +40,12 @@ async def execute_workflow(
         workflow=payload, session=session, user_id=current_user.id
     )
 
-    final_state = await workflow_engine.run()
+    final_state = {}
+
+    async for chunk in workflow_engine.run_stream():
+        data = json.loads(chunk.strip())
+        if data["type"] == "workflow_end":
+            final_state = data["results"]
 
     return ExecuteResponse(status="success", results=final_state)
 
@@ -127,6 +146,26 @@ def delete_workflow(workflow_id: UUID, current_user: CurrentUser, session: Sessi
     return {"ok": True}
 
 
+@router.post("/{workflow_id}/run/stream")
+async def run_workflow_stream(
+    workflow_id: UUID, current_user: CurrentUser, session: SessionDep
+):
+    """Fetch an existing workflow by ID and execute it via SSE."""
+    workflow = session.get(Workflow, workflow_id)
+
+    if not workflow or workflow.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    payload = WorkflowPayload.model_validate(workflow.data)
+    workflow_engine = WorkflowEngine(
+        workflow=payload, session=session, user_id=current_user.id
+    )
+
+    return StreamingResponse(
+        workflow_engine.run_stream(), media_type="text/event-stream"
+    )
+
+
 @router.post("/{workflow_id}/run", response_model=ExecuteResponse)
 async def run_workflow(
     workflow_id: UUID, current_user: CurrentUser, session: SessionDep
@@ -144,6 +183,12 @@ async def run_workflow(
         workflow=payload, session=session, user_id=current_user.id
     )
 
-    final_state = await workflow_engine.run()
+    final_state = {}
+    async for chunk in workflow_engine.run_stream():
+        import json
+
+        data = json.loads(chunk.strip())
+        if data["type"] == "workflow_end":
+            final_state = data["results"]
 
     return ExecuteResponse(status="success", results=final_state)

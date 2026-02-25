@@ -48,6 +48,18 @@
 }
 
 /* React Flow overrides for dark theme */
+@keyframes glow-pulse {
+  0% {
+    box-shadow: 0 0 0 2px var(--color-accent)80, 0 4px 12px var(--color-accent)40;
+  }
+  50% {
+    box-shadow: 0 0 0 4px var(--color-accent)90, 0 8px 32px var(--color-accent)60;
+  }
+  100% {
+    box-shadow: 0 0 0 2px var(--color-accent)80, 0 4px 12px var(--color-accent)40;
+  }
+}
+
 .react-flow {
   --xy-background-color: var(--color-background);
   --xy-minimap-background-color: var(--color-surface);
