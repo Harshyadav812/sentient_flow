@@ -8,7 +8,7 @@ import {
   deleteWorkflow,
   type WorkflowData,
 } from '@/lib/api';
-import { Plus, Trash2, LogOut, Zap, Play } from 'lucide-react';
+import { Plus, Trash2, LogOut, Play, Workflow } from 'lucide-react';
 
 export function DashboardPage() {
   const { user, logout } = useAuthStore();
@@ -81,23 +81,28 @@ export function DashboardPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '12px 24px',
+          padding: '16px 32px',
           borderBottom: '1px solid var(--color-border)',
-          background: 'var(--color-surface)',
+          background: 'rgba(24, 24, 27, 0.7)',
+          backdropFilter: 'blur(12px)',
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div
             style={{
-              background: 'var(--color-accent)',
+              background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))',
               borderRadius: 'var(--radius-sm)',
               padding: 6,
               display: 'flex',
+              boxShadow: '0 2px 8px var(--color-accent-glow)',
             }}
           >
-            <Zap size={16} color="white" />
+            <Workflow size={18} color="white" />
           </div>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>Sentient Flow</span>
+          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>Sentient Flow</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -137,17 +142,19 @@ export function DashboardPage() {
         </div>
 
         {isLoading ? (
-          <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 60 }}>
-            Loading…
+          <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '100px 0' }}>
+            <div style={{ display: 'inline-block', border: '2px solid var(--color-border)', borderTopColor: 'var(--color-accent)', borderRadius: '50%', width: 24, height: 24, animation: 'spin 1s linear infinite' }} />
           </div>
         ) : workflows.length === 0 ? (
           <div
             style={{
               textAlign: 'center',
-              padding: 60,
+              padding: 80,
+              background: 'var(--color-surface)',
               color: 'var(--color-text-muted)',
-              border: '1px dashed var(--color-border)',
-              borderRadius: 'var(--radius-md)',
+              border: '1px dashed var(--color-border-hover)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             }}
           >
             <p style={{ fontSize: 16, marginBottom: 8 }}>No workflows yet</p>
@@ -167,17 +174,25 @@ export function DashboardPage() {
                 style={{
                   background: 'var(--color-surface)',
                   border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: 18,
+                  borderRadius: 'var(--radius-lg)',
+                  padding: 24,
                   cursor: 'pointer',
-                  transition: 'border-color 0.2s',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 12,
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.borderColor = 'var(--color-border-hover)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.borderColor = 'var(--color-border)')
-                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--color-border-hover)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--color-border)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+                }}
                 onClick={() => handleOpen(wf)}
               >
                 <div
@@ -185,7 +200,6 @@ export function DashboardPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    marginBottom: 8,
                   }}
                 >
                   <h3
@@ -217,14 +231,16 @@ export function DashboardPage() {
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                  {wf.description || 'No description'}
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, flex: 1 }}>
+                  {wf.description || 'No description provided.'}
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
+                    fontSize: 12,
                     color: 'var(--color-text-muted)',
-                    marginTop: 8,
+                    marginTop: 'auto',
+                    paddingTop: 12,
+                    borderTop: '1px solid var(--color-border-subtle)',
                   }}
                 >
                   Created {new Date(wf.created_at).toLocaleDateString()}
@@ -241,26 +257,30 @@ export function DashboardPage() {
 const topBtnStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  padding: '6px 12px',
-  background: 'var(--color-surface-hover)',
+  gap: 8,
+  padding: '8px 14px',
+  background: 'transparent',
   border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  color: 'var(--color-text-primary)',
+  borderRadius: 'var(--radius-md)',
+  color: 'var(--color-text-secondary)',
   cursor: 'pointer',
   fontSize: 13,
+  fontWeight: 500,
+  transition: 'all 0.2s',
 };
 
 const primaryBtnStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
-  padding: '8px 16px',
-  background: 'var(--color-accent)',
+  gap: 8,
+  padding: '10px 20px',
+  background: 'var(--color-text-primary)',
   border: 'none',
-  borderRadius: 'var(--radius-sm)',
-  color: 'white',
+  borderRadius: 'var(--radius-md)',
+  color: 'var(--color-background)',
   cursor: 'pointer',
-  fontSize: 13,
+  fontSize: 14,
   fontWeight: 600,
+  transition: 'transform 0.1s, opacity 0.2s',
+  boxShadow: '0 2px 10px rgba(255,255,255,0.1)',
 };

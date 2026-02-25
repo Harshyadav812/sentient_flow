@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CanvasPage } from '@/pages/CanvasPage';
+import { ReactFlowProvider } from '@xyflow/react';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = useAuthStore((s) => s.token);
@@ -34,7 +35,9 @@ export default function App() {
           path="/canvas/:id"
           element={
             <ProtectedRoute>
-              <CanvasPage />
+              <ReactFlowProvider>
+                <CanvasPage />
+              </ReactFlowProvider>
             </ProtectedRoute>
           }
         />

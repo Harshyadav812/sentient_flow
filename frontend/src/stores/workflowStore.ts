@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import * as dagre from "dagre";
 import {
   type Node,
   type Edge,
@@ -39,6 +40,7 @@ interface WorkflowState {
   removeNode: (nodeId: string) => void;
   selectNode: (node: Node<NodeData> | null) => void;
   clear: () => void;
+  layoutNodes: () => void;
 
   // Serialize to/from backend format
   serializeToPayload: () => Record<string, unknown>;
@@ -98,6 +100,40 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       edges: [],
       selectedNode: null,
     }),
+
+  layoutNodes: () => {
+    const { nodes, edges } = get();
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+    // n8n inspired layout settings
+    dagreGraph.setGraph({ rankdir: 'LR', nodesep: 80, ranksep: 150 });
+
+    nodes.forEach((node) => {
+      // Approximate sizes based on our new node design
+      dagreGraph.setNode(node.id, { width: 220, height: 100 });
+    });
+
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    const newNodes = nodes.map((node) => {
+      const nodeWithPosition = dagreGraph.node(node.id);
+      return {
+        ...node,
+        // dagre returns center coordinates, we shift to top-left
+        position: {
+          x: nodeWithPosition.x - 110,
+          y: nodeWithPosition.y - 50,
+        },
+      };
+    });
+
+    set({ nodes: newNodes });
+  },
 
   // Convert React Flow state → backend WorkflowPayload
   serializeToPayload: () => {
@@ -226,5 +262,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       edges: rfEdges,
       selectedNode: null,
     });
+
+    // Auto-layout if nodes seem to be stacked at origin
+    if (rfNodes.length > 1 && rfNodes.every(n => n.position.x === 0 && n.position.y === 0)) {
+      setTimeout(() => get().layoutNodes(), 50);
+    }
   },
 }));

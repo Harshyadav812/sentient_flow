@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { register } from '@/lib/api';
-import { Zap } from 'lucide-react';
+import { Workflow } from 'lucide-react';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -38,11 +38,12 @@ export function LoginPage() {
     >
       <div
         style={{
-          width: 400,
+          width: 420,
           background: 'var(--color-surface)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: 40,
+          borderRadius: '24px',
+          padding: 48,
+          boxShadow: '0 20px 40px rgba(0,0,0,0.4)',
         }}
       >
         {/* Logo */}
@@ -57,27 +58,28 @@ export function LoginPage() {
         >
           <div
             style={{
-              background: 'var(--color-accent)',
-              borderRadius: 'var(--radius-sm)',
-              padding: 8,
+              background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))',
+              borderRadius: 'var(--radius-md)',
+              padding: 10,
               display: 'flex',
+              boxShadow: '0 4px 12px var(--color-accent-glow)',
             }}
           >
-            <Zap size={20} color="white" />
+            <Workflow size={24} color="white" />
           </div>
-          <span style={{ fontSize: 22, fontWeight: 700 }}>Sentient Flow</span>
+          <span style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.03em' }}>Sentient Flow</span>
         </div>
 
         <h2
           style={{
             textAlign: 'center',
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: 500,
             color: 'var(--color-text-secondary)',
-            margin: '0 0 24px',
+            margin: '0 0 32px',
           }}
         >
-          {isRegister ? 'Create your account' : 'Welcome back'}
+          {isRegister ? 'Create your account to start building' : 'Welcome back, please log in'}
         </h2>
 
         <form onSubmit={handleSubmit}>
@@ -126,18 +128,19 @@ export function LoginPage() {
             disabled={isLoading}
             style={{
               width: '100%',
-              padding: '10px 16px',
-              background: isLoading ? 'var(--color-surface-active)' : 'var(--color-accent)',
-              color: 'white',
+              padding: '12px 16px',
+              background: isLoading ? 'var(--color-surface-active)' : 'var(--color-text-primary)',
+              color: 'var(--color-background)',
               border: 'none',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 14,
+              borderRadius: 'var(--radius-md)',
+              fontSize: 15,
               fontWeight: 600,
               cursor: isLoading ? 'wait' : 'pointer',
-              transition: 'background 0.2s',
+              transition: 'transform 0.1s, opacity 0.2s',
+              marginTop: 12,
             }}
           >
-            {isLoading ? 'Loading...' : isRegister ? 'Register' : 'Login'}
+            {isLoading ? 'Loading...' : isRegister ? 'Create Account' : 'Sign In'}
           </button>
         </form>
 
@@ -169,19 +172,20 @@ export function LoginPage() {
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
-  fontSize: 12,
+  fontSize: 13,
   fontWeight: 500,
-  color: 'var(--color-text-secondary)',
-  marginBottom: 6,
+  color: 'var(--color-text-primary)',
+  marginBottom: 8,
 };
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: '10px 12px',
+  padding: '12px 14px',
   background: 'var(--color-background)',
   border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
+  borderRadius: 'var(--radius-md)',
   color: 'var(--color-text-primary)',
-  fontSize: 14,
+  fontSize: 15,
   outline: 'none',
+  transition: 'border-color 0.2s, box-shadow 0.2s',
 };

@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  useReactFlow,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -26,6 +27,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  LayoutTemplate,
 } from 'lucide-react';
 
 const nodeTypes: NodeTypes = {
@@ -36,6 +38,7 @@ export function CanvasPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const {
     nodes,
@@ -50,6 +53,7 @@ export function CanvasPage() {
     selectNode,
     serializeToPayload,
     deserializeFromPayload,
+    layoutNodes,
   } = useWorkflowStore();
 
   const { isRunning, results, error, execute, clear } = useExecutionStore();
@@ -85,11 +89,10 @@ export function CanvasPage() {
       const wrapper = reactFlowWrapper.current;
       if (!wrapper) return;
 
-      const bounds = wrapper.getBoundingClientRect();
-      const position = {
-        x: e.clientX - bounds.left - 90,
-        y: e.clientY - bounds.top - 30,
-      };
+      const position = screenToFlowPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
 
       const newNode = {
         id: generateNodeId(),
@@ -182,6 +185,10 @@ export function CanvasPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={layoutNodes} style={topBtnStyle} title="Auto Layout Nodes">
+            <LayoutTemplate size={14} />
+            Auto Layout
+          </button>
           {results && (
             <div
               style={{

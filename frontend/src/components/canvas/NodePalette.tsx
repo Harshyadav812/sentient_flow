@@ -7,7 +7,7 @@ interface NodeTemplate {
   type: string;
   label: string;
   category: 'trigger' | 'action' | 'logic' | 'output';
-  icon: React.ComponentType<{ size?: number; color?: string }>;
+  icon: React.ComponentType<{ size?: number; color?: string; style?: React.CSSProperties }>;
 }
 
 const NODE_TEMPLATES: NodeTemplate[] = [
@@ -47,25 +47,27 @@ export function NodePalette() {
   return (
     <div
       style={{
-        width: 220,
+        width: 240,
         background: 'var(--color-surface)',
         borderRight: '1px solid var(--color-border)',
-        padding: '16px 12px',
+        padding: '24px 16px',
         overflowY: 'auto',
         height: '100%',
+        boxShadow: '4px 0 24px rgba(0,0,0,0.2)',
+        zIndex: 10,
       }}
     >
       <h3
         style={{
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          color: 'var(--color-text-muted)',
-          margin: '0 0 16px 4px',
+          letterSpacing: '0.1em',
+          color: 'var(--color-text-primary)',
+          margin: '0 0 20px 4px',
         }}
       >
-        Node Palette
+        Nodes
       </h3>
 
       {categories.map((cat) => {
@@ -76,12 +78,12 @@ export function NodePalette() {
           <div key={cat} style={{ marginBottom: 16 }}>
             <div
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: categoryColors[cat],
-                marginBottom: 6,
+                color: 'var(--color-text-muted)',
+                marginBottom: 8,
                 paddingLeft: 4,
               }}
             >
@@ -95,31 +97,36 @@ export function NodePalette() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
+                  gap: 12,
+                  padding: '10px 12px',
+                  borderRadius: 'var(--radius-md)',
                   cursor: 'grab',
-                  marginBottom: 2,
-                  transition: 'background 0.15s',
+                  marginBottom: 4,
+                  transition: 'all 0.15s ease',
                   fontSize: 13,
+                  fontWeight: 500,
                   color: 'var(--color-text-primary)',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.0)',
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = 'var(--color-surface-hover)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = 'transparent')
-                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--color-surface-hover)';
+                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.0)';
+                }}
               >
                 <div
                   style={{
-                    background: `${categoryColors[cat]}22`,
-                    borderRadius: 4,
-                    padding: 4,
+                    background: `${categoryColors[cat]}15`,
+                    borderRadius: 'var(--radius-sm)',
+                    padding: 6,
                     display: 'flex',
+                    color: categoryColors[cat],
                   }}
                 >
-                  <tpl.icon size={14} color={categoryColors[cat]} />
+                  <tpl.icon size={16} style={{ strokeWidth: 1.5 }} />
                 </div>
                 {tpl.label}
               </div>

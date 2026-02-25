@@ -1,18 +1,19 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0a0a0f;
-  --color-surface: #13131a;
-  --color-surface-hover: #1a1a24;
-  --color-surface-active: #22222e;
-  --color-border: #2a2a3a;
-  --color-border-hover: #3a3a4f;
-  --color-text-primary: #e8e8ed;
-  --color-text-secondary: #9090a8;
-  --color-text-muted: #606078;
-  --color-accent: #7c5cfc;
-  --color-accent-hover: #9070ff;
-  --color-accent-glow: #7c5cfc33;
+  --color-background: #18181b;      /* Zinc 900 */
+  --color-surface: #27272a;         /* Zinc 800 */
+  --color-surface-hover: #3f3f46;   /* Zinc 700 */
+  --color-surface-active: #52525b;  /* Zinc 600 */
+  --color-border: #3f3f46;          /* Zinc 700 */
+  --color-border-subtle: #27272a;   /* Zinc 800 */
+  --color-border-hover: #52525b;    /* Zinc 600 */
+  --color-text-primary: #f4f4f5;    /* Zinc 100 */
+  --color-text-secondary: #a1a1aa;  /* Zinc 400 */
+  --color-text-muted: #71717a;      /* Zinc 500 */
+  --color-accent: #6366f1;          /* Indigo 500 */
+  --color-accent-hover: #4f46e5;    /* Indigo 600 */
+  --color-accent-glow: #6366f133;
   --color-success: #34d399;
   --color-error: #f87171;
   --color-warning: #fbbf24;
@@ -33,7 +34,9 @@
 
   body {
     margin: 0;
-    background: var(--color-background);
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #27272a 0%, var(--color-background) 60%);
+    background-attachment: fixed;
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -49,8 +52,8 @@
   --xy-background-color: var(--color-background);
   --xy-minimap-background-color: var(--color-surface);
   --xy-edge-stroke: var(--color-border);
-  --xy-edge-stroke-selected: var(--color-accent);
-  --xy-connectionline-stroke: var(--color-accent);
+  --xy-edge-stroke-selected: var(--color-text-primary);
+  --xy-connectionline-stroke: var(--color-text-primary);
   --xy-controls-button-background-color: var(--color-surface);
   --xy-controls-button-color: var(--color-text-primary);
   --xy-controls-button-border-color: var(--color-border);
