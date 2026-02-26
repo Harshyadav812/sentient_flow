@@ -209,18 +209,18 @@ def get_value_from_path(workflow_results, path: str):
             if part in current_val:
                 current_val = current_val[part]
                 continue
-            else:
-                msg = f"Key '{part}' not found in {original_path}"
-                raise ValueError(msg)
+
+            msg = f"Key '{part}' not found in {original_path}"
+            raise ValueError(msg)
 
         # Handle List Access (Array Index)
-        elif isinstance(current_val, list) and part.isdigit():
+        if isinstance(current_val, list) and part.isdigit():
             try:
                 current_val = current_val[int(part)]
                 continue
             except IndexError:
                 msg = f"Index {part} out of bounds in {original_path}"
-                raise ValueError(msg)
+                raise ValueError(msg) from IndexError
 
         msg = f"Cannot access '{part}' on {type(current_val)} in {original_path}"
         raise ValueError(msg)
@@ -255,18 +255,16 @@ def resolve_all_variables(workflow_results, task):
             return get_value_from_path(workflow_results, task)
 
         # Case B: Template String (Replace inside text, force string)
-        else:
+        def resolve_template_string(match):
+            try:
+                var_path = match.group(0)
+                resolved = get_value_from_path(workflow_results, var_path)
+                return str(resolved)
+            except ValueError:
+                # Keep original text if resolution fails (e.g. "$100 USD")
+                return match.group(0)
 
-            def resolve_template_string(match):
-                try:
-                    var_path = match.group(0)
-                    resolved = get_value_from_path(workflow_results, var_path)
-                    return str(resolved)
-                except ValueError:
-                    # Keep original text if resolution fails (e.g. "$100 USD")
-                    return match.group(0)
-
-            return re.sub(pattern, resolve_template_string, task)
+        return re.sub(pattern, resolve_template_string, task)
 
     return task
 
@@ -352,7 +350,7 @@ LLM_DEFAULT_MODELS = {
 }
 
 
-async def do_llm_call(
+async def do_llm_call(  # noqa: C901, PLR0912, PLR0913
     provider: str,
     api_key: str,
     messages: list[dict],
@@ -360,7 +358,7 @@ async def do_llm_call(
     temperature: float = 0.7,
     max_tokens: int = 1024,
     base_url: str | None = None,
-    timeout: int = 120,
+    request_timeout: int = 120,
 ) -> dict:
     """
     Make a chat completion call to any LLM provider.
@@ -374,7 +372,7 @@ async def do_llm_call(
     # Determine the endpoint URL
     if base_url:
         url = base_url
-    elif provider in LLM_PROVIDER_URLS and LLM_PROVIDER_URLS[provider]:
+    elif LLM_PROVIDER_URLS.get(provider):
         url = LLM_PROVIDER_URLS[provider]
     else:
         msg = f"Unknown provider: {provider}. Set a custom base_url."
@@ -421,7 +419,7 @@ async def do_llm_call(
             "max_tokens": max_tokens,
         }
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=request_timeout) as client:
         response = await client.post(url, json=body, headers=headers)
 
         if response.status_code != 200:  # noqa: PLR2004

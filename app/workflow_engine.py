@@ -290,3 +290,17 @@ class WorkflowEngine:
         yield (
             json.dumps({"type": "workflow_end", "results": self.execution_state}) + "\n"
         )
+
+    async def run(self) -> dict[str, Any]:
+        """
+        Convenience wrapper around run_stream() for programmatic execution.
+
+        Consumes the stream and returns the final execution state.
+        """
+        final_state = {}
+        async for chunk in self.run_stream():
+            data = json.loads(chunk.strip())
+            if data["type"] == "workflow_end":
+                final_state = data["results"]
+
+        return final_state

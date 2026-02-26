@@ -40,12 +40,7 @@ async def execute_workflow(
         workflow=payload, session=session, user_id=current_user.id
     )
 
-    final_state = {}
-
-    async for chunk in workflow_engine.run_stream():
-        data = json.loads(chunk.strip())
-        if data["type"] == "workflow_end":
-            final_state = data["results"]
+    final_state = await workflow_engine.run()
 
     return ExecuteResponse(status="success", results=final_state)
 
@@ -183,12 +178,6 @@ async def run_workflow(
         workflow=payload, session=session, user_id=current_user.id
     )
 
-    final_state = {}
-    async for chunk in workflow_engine.run_stream():
-        import json
-
-        data = json.loads(chunk.strip())
-        if data["type"] == "workflow_end":
-            final_state = data["results"]
+    final_state = await workflow_engine.run()
 
     return ExecuteResponse(status="success", results=final_state)

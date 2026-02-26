@@ -15,4 +15,4 @@ class Settings(BaseSettings):
     encryption_key: SecretStr
 
 
-settings = Settings()  # loaded from .env file
+settings = Settings()  # loaded from .env file  # ty:ignore[missing-argument]

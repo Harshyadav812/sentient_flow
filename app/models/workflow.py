@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column
+from sqlalchemy import JSON, Column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -21,7 +21,9 @@ class Workflow(SQLModel, table=True):
 
     # The graph(stored as JSON)
     # We use sa_column to tell SQLModel to use a Postgres JSONB column
-    data: dict[str, Any] = Field(default={}, sa_column=Column(JSONB))
+    data: dict[str, Any] = Field(
+        default={}, sa_column=Column(JSON().with_variant(JSONB, "postgresql"))
+    )
 
     # Ownership (Strict Isolation)
     owner_id: UUID = Field(foreign_key="user.id", index=True)
