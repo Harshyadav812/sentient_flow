@@ -1,5 +1,9 @@
+import ast
 import asyncio
+import ipaddress
 import re
+import socket
+from urllib.parse import urlparse
 
 import httpx
 
@@ -82,15 +86,55 @@ def do_condition(left, operator, right):
             return left_val >= right_val
         case "<=":
             return left_val <= right_val
+        case "contains":
+            return str(right_val) in str(left_val)
+        case "startswith":
+            return str(left_val).startswith(str(right_val))
+        case "endswith":
+            return str(left_val).endswith(str(right_val))
         case _:
-            err_msg = f"Invalid operator: {operator}. Valid: <, >, ==, !=, >=, <="
+            err_msg = f"Invalid operator: {operator}. Valid: <, >, ==, !=, >=, <=, contains, startswith, endswith"
             raise ValueError(err_msg)
+
+
+def validate_url_not_internal(url: str) -> None:
+    """Block requests to internal/private IP addresses to prevent SSRF."""
+    parsed = urlparse(url)
+
+    # Only allow http and https schemes
+    if parsed.scheme not in ("http", "https"):
+        msg = (
+            f"Blocked URL: scheme '{parsed.scheme}' is not allowed. Use http or https."
+        )
+        raise ValueError(msg)
+
+    hostname = parsed.hostname
+    if not hostname:
+        msg = "Blocked URL: no hostname found"
+        raise ValueError(msg)
+
+    # Resolve hostname to IP(s) and check each one
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror as e:
+        msg = f"Cannot resolve hostname '{hostname}': {e}"
+        raise ValueError(msg) from e
+
+    for addr_info in addr_infos:
+        ip_str = addr_info[4][0]
+        ip = ipaddress.ip_address(ip_str)
+
+        if ip.is_private or ip.is_reserved or ip.is_loopback or ip.is_link_local:
+            msg = f"Blocked URL: requests to internal/private addresses ({ip_str}) are not allowed"
+            raise ValueError(msg)
 
 
 async def do_http(
     url, method="GET", body=None, headers=None, retries=0, retry_delay=1, timeout=30
 ):
     """Make HTTP requests with retry support, headers, and timeout."""
+    validate_url_not_internal(url)
+
     if headers is None:
         headers = {}
 
@@ -276,20 +320,82 @@ def resolve_all_variables(workflow_results, task):
 
 def do_safe_eval(expression: str, input_data):
     """
-    Safely evaluate a Python expression.
+    Safely evaluate a Python expression using AST-based whitelist validation.
 
-    Only allows basic math, string ops, and built-in functions.
+    Only allows basic math, string ops, and whitelisted built-in functions.
     The variable 'input' is available to reference data from upstream nodes.
     """
-    # Block dangerous constructs
-    blocked = ["import", "exec(", "eval(", "__", "open(", "os.", "sys.", "subprocess"]
-    lower_expr = expression.lower()
-    for b in blocked:
-        if b in lower_expr:
-            msg = f"Blocked expression: '{b}' is not allowed"
-            raise ValueError(msg)
+    # 1. Parse into AST — rejects syntax errors and statements
+    try:
+        tree = ast.parse(expression, mode="eval")
+    except SyntaxError as e:
+        msg = f"Invalid expression syntax: {e}"
+        raise ValueError(msg) from e
 
-    # Safe builtins
+    # 2. Whitelist of allowed AST node types
+    allowed_nodes = {
+        # Literals
+        ast.Expression,
+        ast.Constant,
+        # Variables
+        ast.Name,
+        ast.Load,
+        ast.Store,
+        # Operators
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.BoolOp,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.FloorDiv,
+        ast.Mod,
+        ast.Pow,
+        ast.USub,
+        ast.UAdd,
+        ast.Not,
+        ast.Invert,
+        ast.And,
+        ast.Or,
+        # Comparisons
+        ast.Compare,
+        ast.Eq,
+        ast.NotEq,
+        ast.Lt,
+        ast.LtE,
+        ast.Gt,
+        ast.GtE,
+        ast.Is,
+        ast.IsNot,
+        ast.In,
+        ast.NotIn,
+        # Conditional
+        ast.IfExp,
+        # Containers
+        ast.List,
+        ast.Tuple,
+        ast.Dict,
+        ast.Set,
+        # Subscript / Index
+        ast.Subscript,
+        ast.Slice,
+        # Function calls (validated separately)
+        ast.Call,
+        ast.keyword,
+        # Comprehensions
+        ast.ListComp,
+        ast.comprehension,
+        # String formatting
+        ast.JoinedStr,
+        ast.FormattedValue,
+        # Attribute access (validated separately for dunder blocking)
+        ast.Attribute,
+        # Starred expressions (e.g. *args in function calls)
+        ast.Starred,
+    }
+
+    # Safe builtins — note: 'type' removed to prevent class introspection attacks
     safe_builtins = {
         "len": len,
         "str": str,
@@ -310,13 +416,55 @@ def do_safe_eval(expression: str, input_data):
         "enumerate": enumerate,
         "zip": zip,
         "range": range,
-        "type": type,
         "isinstance": isinstance,
         "True": True,
         "False": False,
         "None": None,
     }
 
+    safe_names = set(safe_builtins.keys()) | {"input"}
+
+    # 3. Walk the AST and validate every node
+    for node in ast.walk(tree):
+        node_type = type(node)
+
+        if node_type not in allowed_nodes:
+            msg = f"Blocked expression: '{node_type.__name__}' is not allowed"
+            raise ValueError(msg)
+
+        # Block dunder attribute access (e.g. __class__, __import__, __builtins__)
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr.startswith("__")
+            and node.attr.endswith("__")
+        ):
+            msg = f"Blocked expression: access to '{node.attr}' is not allowed"
+            raise ValueError(msg)
+
+        # Validate function calls — only allow whitelisted function names
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name):
+                if node.func.id not in safe_names:
+                    msg = (
+                        f"Blocked expression: function '{node.func.id}' is not allowed"
+                    )
+                    raise ValueError(msg)
+            elif isinstance(node.func, ast.Attribute):
+                pass  # Method calls like "hello".upper() — attribute already validated
+            else:
+                msg = "Blocked expression: complex function calls are not allowed"
+                raise ValueError(msg)
+
+        # Validate Name references
+        if (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id not in safe_names
+        ):
+            msg = f"Blocked expression: variable '{node.id}' is not allowed"
+            raise ValueError(msg)
+
+    # 4. AST passed — safe to eval
     return eval(expression, {"__builtins__": safe_builtins}, {"input": input_data})  # noqa: S307
 
 

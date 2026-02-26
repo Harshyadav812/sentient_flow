@@ -7,13 +7,17 @@ from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core import auth, security
+from app.core.config import settings
+from app.core.rate_limit import rate_limit_login, rate_limit_register
 from app.models.users import User
 from app.schemas.users import Token, UserCreate, UserRead
 
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserRead)
+@router.post(
+    "/register", response_model=UserRead, dependencies=[Depends(rate_limit_register)]
+)
 def register(user_in: UserCreate, session: SessionDep):
     # Check if email exists
     statement = select(User).where(User.email == user_in.email)
@@ -30,7 +34,7 @@ def register(user_in: UserCreate, session: SessionDep):
     return user
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(rate_limit_login)])
 def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep
 ):
@@ -46,8 +50,8 @@ def login(
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    # Create Token
-    access_token_expires = timedelta(days=1)
+    # Create Token — use config value, not hardcoded
+    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = auth.create_access_token(
         subject=user.id, expires_delta=access_token_expires
     )

@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:8000';
+// SECURITY: Use env variable for API base. Set VITE_API_BASE for production (https).
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 async function request<T>(
   endpoint: string,

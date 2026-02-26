@@ -19,7 +19,7 @@ class CipherService:
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
-            iterations=100_000,  # 2. Note: This is computationally expensive
+            iterations=600_000,  # NIST SP 800-132 recommended minimum
         )
         key = base64.urlsafe_b64encode(kdf.derive(self.master_key.encode()))
         return Fernet(key)

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from collections import deque
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -15,6 +16,11 @@ from app.tasks import resolve_all_variables
 
 # A constant signal to represent a bypassed branch
 SKIP_SIGNAL = "__SKIPPED_BRANCH__"
+
+# Maximum number of node executions before aborting (DoS prevention)
+MAX_EXECUTION_STEPS = 100
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowEngine:
@@ -71,6 +77,9 @@ class WorkflowEngine:
             node.name: [] for node in self.workflow.nodes
         }
 
+        # Cycle detection — abort before execution if graph has cycles
+        self._detect_cycles()
+
     def get_next_nodes(self, node_name: str, output_index: int = 0) -> list[str]:
         """Get active children for the selected output index."""
         if node_name not in self.workflow.connections:
@@ -88,6 +97,42 @@ class WorkflowEngine:
             # next_nodes = destination_nodes_list[output_index]
             return [target.node for target in destination_nodes_list]
         return []
+
+    def _detect_cycles(self) -> None:
+        """Detect cycles in the workflow graph using DFS with coloring."""
+        # Build adjacency list
+        adjacency: dict[str, list[str]] = {
+            node.name: [] for node in self.workflow.nodes
+        }
+        for node_name, connections in self.workflow.connections.items():
+            for connection_type in connections.values():
+                for output_index_list in connection_type:
+                    for target in output_index_list:
+                        if node_name in adjacency:
+                            adjacency[node_name].append(target.node)
+
+        # DFS with 3-color marking: white=unvisited, gray=in-progress, black=done
+        white, gray, black = 0, 1, 2
+        color = {name: white for name in adjacency}
+
+        def dfs(node: str) -> str | None:
+            color[node] = gray
+            for neighbor in adjacency.get(node, []):
+                if color.get(neighbor) == gray:
+                    return neighbor  # Cycle found!
+                if color.get(neighbor) == white:
+                    cycle_node = dfs(neighbor)
+                    if cycle_node is not None:
+                        return cycle_node
+            color[node] = black
+            return None
+
+        for node_name in adjacency:
+            if color[node_name] == white:
+                cycle_node = dfs(node_name)
+                if cycle_node is not None:
+                    msg = f"Invalid workflow: cycle detected involving node '{cycle_node}'. Remove circular connections."
+                    raise ValueError(msg)
 
     def get_skipped_nodes(self, node_name: str, active_output_index: int) -> list[str]:
         """Get all children connected to unselected output paths (for IF/Switch nodes)."""
@@ -190,8 +235,24 @@ class WorkflowEngine:
             (self.start_node_name, self.input_buffer[self.start_node_name])
         )
 
+        steps_executed = 0
+
         while self.queue:
             current_node_name, buffered_inputs = self.queue.popleft()
+
+            # H9: Execution step limit to prevent DoS
+            steps_executed += 1
+            if steps_executed > MAX_EXECUTION_STEPS:
+                yield (
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "message": f"Workflow aborted: exceeded maximum of {MAX_EXECUTION_STEPS} execution steps.",
+                        }
+                    )
+                    + "\n"
+                )
+                return
 
             # Send node start event
             yield json.dumps({"type": "node_start", "node": current_node_name}) + "\n"
@@ -260,8 +321,10 @@ class WorkflowEngine:
                         self.queue.append((name, self.input_buffer[name]))
 
             except Exception as e:
-                err_msg = f"{type(e).__name__}: {str(e)}"
-                self.execution_state[current_node_name] = {"error": err_msg}
+                # M14: Log full error server-side but only send sanitized message to client
+                logger.exception("Node '%s' failed during execution", current_node_name)
+                safe_error_msg = f"Node '{current_node_name}' failed during execution"
+                self.execution_state[current_node_name] = {"error": safe_error_msg}
 
                 yield (
                     json.dumps(
@@ -269,7 +332,7 @@ class WorkflowEngine:
                             "type": "node_end",
                             "node": current_node_name,
                             "status": "error",
-                            "error": err_msg,
+                            "error": safe_error_msg,
                         }
                     )
                     + "\n"

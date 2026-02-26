@@ -1,6 +1,7 @@
+import re
 from uuid import UUID
 
-from pydantic import EmailStr
+from pydantic import EmailStr, field_validator
 from sqlmodel import Field, SQLModel
 
 
@@ -17,6 +18,21 @@ class UserBase(SQLModel):
 # Create: Input for Sign Up (client -> server)
 class UserCreate(UserBase):
     password: str = Field(min_length=8)
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        """Enforce password complexity: min 8 chars, 1 upper, 1 lower, 1 digit."""
+        if not re.search(r"[A-Z]", v):
+            msg = "Password must contain at least one uppercase letter"
+            raise ValueError(msg)
+        if not re.search(r"[a-z]", v):
+            msg = "Password must contain at least one lowercase letter"
+            raise ValueError(msg)
+        if not re.search(r"\d", v):
+            msg = "Password must contain at least one digit"
+            raise ValueError(msg)
+        return v
 
 
 # Read: Output for API Responses (server -> client)

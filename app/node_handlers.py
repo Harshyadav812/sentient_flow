@@ -91,8 +91,11 @@ async def handle_calculate(
 async def handle_delay(
     params: dict, input_data: Any, engine: WorkflowEngine
 ) -> tuple[Any, int]:
-    """Delay/Wait node."""
-    seconds = params["seconds"]
+    """Delay/Wait node. Capped at 300 seconds to prevent DoS."""
+    MAX_DELAY_SECONDS = 300
+    seconds = min(float(params.get("seconds", 0)), MAX_DELAY_SECONDS)
+    if seconds < 0:
+        seconds = 0
     await asyncio.sleep(seconds)
     return f"Waited {seconds} seconds", 0
 
@@ -226,13 +229,8 @@ async def handle_text_template(
 
 
 def _resolve_llm_api_key(params: dict, engine: WorkflowEngine) -> str:
-    """Resolve API key from params or from a saved credential (by name)."""
-    # 1. Direct API key in params
-    api_key = params.get("api_key", "")
-    if api_key:
-        return api_key
-
-    # 2. Look up credential by ID (UUID sent from frontend dropdown)
+    """Resolve API key from a saved credential. Plaintext api_key is not supported."""
+    # Look up credential by ID (UUID sent from frontend dropdown)
     credential_id = params.get("credential", "")
     if credential_id and engine.session:
         try:

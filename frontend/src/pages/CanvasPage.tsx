@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -29,6 +28,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
+  Menu,
 } from 'lucide-react';
 
 const nodeTypes: NodeTypes = {
@@ -40,6 +40,7 @@ export function CanvasPage() {
   const navigate = useNavigate();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
+  const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [validationErrors, setValidationErrors] = useState<WorkflowError[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -202,6 +203,13 @@ export function CanvasPage() {
           >
             <ArrowLeft size={14} />
           </button>
+          <button
+            onClick={() => setIsPaletteOpen((prev) => !prev)}
+            style={topBtnStyle}
+            title="Toggle Nodes Palette"
+          >
+            <Menu size={14} />
+          </button>
           <input
             value={workflowName}
             onChange={(e) => setWorkflowName(e.target.value)}
@@ -320,7 +328,7 @@ export function CanvasPage() {
       {/* Main area */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Palette */}
-        <NodePalette />
+        {isPaletteOpen && <NodePalette />}
 
         {/* Canvas */}
         <div ref={reactFlowWrapper} style={{ flex: 1 }}>
@@ -353,14 +361,6 @@ export function CanvasPage() {
                 background: 'var(--color-surface)',
                 borderRadius: 'var(--radius-sm)',
               }}
-            />
-            <MiniMap
-              style={{
-                background: 'var(--color-surface)',
-                borderRadius: 'var(--radius-sm)',
-              }}
-              maskColor="var(--color-background)bb"
-              nodeColor="var(--color-accent)"
             />
           </ReactFlow>
         </div>
