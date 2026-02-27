@@ -13,6 +13,7 @@ import { WorkflowNode } from '@/components/canvas/WorkflowNode';
 import { DeletableEdge } from '@/components/canvas/DeletableEdge';
 import { NodePalette } from '@/components/canvas/NodePalette';
 import { PropertiesPanel } from '@/components/canvas/PropertiesPanel';
+import { ExecutionHistory } from '@/components/canvas/ExecutionHistory';
 import {
   useWorkflowStore,
   generateNodeId,
@@ -174,8 +175,19 @@ export function CanvasPage() {
     setShowErrors(false);
     setValidationErrors([]);
     clear();
+
+    // Save before running so the backend has the latest graph
     const payload = serializeToPayload();
-    await execute(payload);
+    if (id) {
+      try {
+        await updateWorkflow(id, { name: workflowName, data: payload });
+      } catch {
+        toast.error('Failed to save before running');
+        return;
+      }
+    }
+
+    await execute(payload, id);
   };
 
   // Get execution status for a node
@@ -251,6 +263,9 @@ export function CanvasPage() {
               {error ? 'Failed' : 'Complete'}
             </div>
           )}
+
+          {/* Execution history dropdown */}
+          <ExecutionHistory workflowId={id} />
 
           {/* Run button */}
           <button

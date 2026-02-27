@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, credentials, workflows
+from app.api.routes import auth, credentials, executions, workflows
 
 
 @asynccontextmanager
@@ -29,6 +29,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(workflows.router, prefix="/workflows", tags=["workflows"])
 app.include_router(credentials.router, prefix="/credentials", tags=["credentials"])
+app.include_router(executions.router, prefix="/executions", tags=["executions"])
 
 
 if __name__ == "__main__":

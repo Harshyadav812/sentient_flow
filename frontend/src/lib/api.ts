@@ -128,3 +128,47 @@ export async function createCredential(payload: { name: string; type: string; da
 export async function deleteCredential(id: string) {
   return request(`/credentials/${id}`, { method: 'DELETE' });
 }
+
+// Executions
+export interface ExecutionNodeData {
+  id: string;
+  node_id: string;
+  status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
+  input_data: unknown;
+  output_data: unknown;
+  error_message: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ExecutionData {
+  id: string;
+  workflow_id: string;
+  owner_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  workflow_name: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface ExecutionDetailData extends ExecutionData {
+  state: Record<string, unknown>;
+  nodes: ExecutionNodeData[];
+}
+
+export async function getAllExecutions() {
+  return request<ExecutionData[]>('/executions/');
+}
+
+export async function getExecutionById(executionId: string) {
+  return request<ExecutionDetailData>(`/executions/${executionId}`);
+}
+
+export async function getExecutions(workflowId: string) {
+  return request<ExecutionData[]>(`/workflows/${workflowId}/executions`);
+}
+
+export async function getExecutionDetail(workflowId: string, executionId: string) {
+  return request<ExecutionDetailData>(`/workflows/${workflowId}/executions/${executionId}`);
+}

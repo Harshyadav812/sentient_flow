@@ -9,7 +9,7 @@ import {
   deleteWorkflow,
   type WorkflowData,
 } from '@/lib/api';
-import { Plus, Trash2, LogOut, Play, Workflow, Key, Upload } from 'lucide-react';
+import { Plus, Trash2, LogOut, Play, Workflow, Key, Upload, History } from 'lucide-react';
 import { CredentialsModal } from '@/components/CredentialsModal';
 import { ImportWorkflowModal } from '@/components/ImportWorkflowModal';
 
@@ -148,6 +148,9 @@ export function DashboardPage() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button onClick={() => setShowCredentials(true)} style={topBtnStyle}>
               <Key size={14} /> Credentials
+            </button>
+            <button onClick={() => navigate('/executions')} style={topBtnStyle}>
+              <History size={14} /> Executions
             </button>
             <button onClick={() => setShowImport(true)} style={topBtnStyle}>
               <Upload size={14} /> Import JSON

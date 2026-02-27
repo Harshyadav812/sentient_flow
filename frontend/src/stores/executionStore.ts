@@ -3,23 +3,27 @@ import { toast } from 'sonner';
 
 interface ExecutionState {
   isRunning: boolean;
+  executionId: string | null;
   runningNode: string | null;
   nodeStatuses: Record<string, 'success' | 'error' | 'skipped'>;
   results: Record<string, unknown> | null;
   error: string | null;
-  execute: (payload: Record<string, unknown>) => Promise<void>;
+  execute: (payload: Record<string, unknown>, workflowId?: string) => Promise<void>;
   clear: () => void;
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
 export const useExecutionStore = create<ExecutionState>((set) => ({
   isRunning: false,
+  executionId: null,
   runningNode: null,
   nodeStatuses: {},
   results: null,
   error: null,
 
-  execute: async (payload) => {
-    set({ isRunning: true, runningNode: null, nodeStatuses: {}, error: null, results: null });
+  execute: async (payload, workflowId) => {
+    set({ isRunning: true, executionId: null, runningNode: null, nodeStatuses: {}, error: null, results: null });
     try {
       const token = localStorage.getItem('token');
       const headers: Record<string, string> = {
@@ -27,10 +31,16 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
       };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const res = await fetch(`http://localhost:8000/workflows/execute/stream`, {
+      // Use the saved-workflow route when we have an ID (enables execution logging)
+      const url = workflowId
+        ? `${API_BASE}/workflows/${workflowId}/run/stream`
+        : `${API_BASE}/workflows/execute/stream`;
+
+      const res = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload)
+        // The ID-based route doesn't need a body
+        ...(workflowId ? {} : { body: JSON.stringify(payload) }),
       });
 
       if (!res.ok || !res.body) {
@@ -51,7 +61,9 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
           try {
             const data = JSON.parse(line);
 
-            if (data.type === 'node_start') {
+            if (data.type === 'execution_start') {
+              set({ executionId: data.execution_id });
+            } else if (data.type === 'node_start') {
               set({ runningNode: data.node });
             } else if (data.type === 'node_end') {
               set(state => ({
@@ -80,5 +92,5 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
     }
   },
 
-  clear: () => set({ results: null, error: null, runningNode: null, nodeStatuses: {} }),
+  clear: () => set({ results: null, error: null, runningNode: null, nodeStatuses: {}, executionId: null }),
 }));

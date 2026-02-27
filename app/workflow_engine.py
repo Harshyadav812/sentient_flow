@@ -248,6 +248,17 @@ class WorkflowEngine:
             self.session.commit()
             self.session.refresh(execution_record)
 
+            # Tell the frontend which execution this is
+            yield (
+                json.dumps(
+                    {
+                        "type": "execution_start",
+                        "execution_id": str(execution_record.id),
+                    }
+                )
+                + "\n"
+            )
+
         self.input_buffer[self.start_node_name].append({})
         self.queue.append(
             (self.start_node_name, self.input_buffer[self.start_node_name])
@@ -276,11 +287,24 @@ class WorkflowEngine:
             yield json.dumps({"type": "node_start", "node": current_node_name}) + "\n"
 
             # Brief visual delay for demo purposes (half a second)
-            await asyncio.sleep(0.5)
+            # await asyncio.sleep(0.5)
 
             is_skipped = all(i == SKIP_SIGNAL for i in buffered_inputs)
             if is_skipped:
                 self.execution_state[current_node_name] = {"status": "skipped"}
+
+                # Record the skipped node in execution log
+                if execution_record and self.session:
+                    skip_record = ExecutionNode(
+                        execution_id=execution_record.id,
+                        node_id=current_node_name,
+                        status=NodeExecutionStatus.SKIPPED,
+                        started_at=datetime.now(UTC),
+                        finished_at=datetime.now(UTC),
+                    )
+                    self.session.add(skip_record)
+                    self.session.commit()
+
                 for child in self.get_all_children(current_node_name):
                     self.input_buffer[child].append(SKIP_SIGNAL)
                     if len(self.input_buffer[child]) == self.in_degree[child]:
@@ -301,10 +325,10 @@ class WorkflowEngine:
             if execution_record and self.session:
                 node_record = ExecutionNode(
                     execution_id=execution_record.id,
-                    node_name=current_node_name,
+                    node_id=current_node_name,
                     status=NodeExecutionStatus.RUNNING,
                     input_data=input_data,
-                    stated_at=datetime.now(UTC),
+                    started_at=datetime.now(UTC),
                 )
                 self.session.add(node_record)
                 self.session.commit()

@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/pages/LoginPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CanvasPage } from '@/pages/CanvasPage';
+import { ExecutionsPage } from '@/pages/ExecutionsPage';
 import { ReactFlowProvider } from '@xyflow/react';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/executions"
+          element={
+            <ProtectedRoute>
+              <ExecutionsPage />
             </ProtectedRoute>
           }
         />
