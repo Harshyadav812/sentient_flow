@@ -39,6 +39,7 @@ interface WorkflowState {
   updateNodeData: (nodeId: string, data: Partial<NodeData>) => void;
   removeNode: (nodeId: string) => void;
   selectNode: (node: Node<NodeData> | null) => void;
+  renameNode: (nodeId: string, newName: string) => void;
   clear: () => void;
   layoutNodes: () => void;
 
@@ -50,6 +51,28 @@ interface WorkflowState {
 let nodeIdCounter = 1;
 export function generateNodeId() {
   return `node_${Date.now()}_${nodeIdCounter++}`;
+}
+
+export function getUniqueNodeName(requestedName: string, existingNames: string[]): string {
+  const trimmedName = requestedName.trim();
+  const nameSet = new Set(existingNames);
+  if (!nameSet.has(trimmedName)) {
+    return trimmedName;
+  }
+
+  // Base name extraction: "Run 1" -> "Run", "Run" -> "Run"
+  const match = trimmedName.match(/^(.*?)(?:\\s+(\\d+))?$/);
+  const baseName = match ? match[1].trim() : trimmedName;
+
+  let counter = 1;
+  let newName = `${baseName} ${counter}`;
+
+  while (nameSet.has(newName)) {
+    counter++;
+    newName = `${baseName} ${counter}`;
+  }
+
+  return newName;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
@@ -71,12 +94,40 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   onConnect: (connection) =>
     set({ edges: addEdge({ ...connection, animated: true }, get().edges) }),
 
-  addNode: (node) => set({ nodes: [...get().nodes, node] }),
+  addNode: (node) => set((state) => {
+    const existingNames = state.nodes.map(n => n.data.label);
+    const uniqueName = getUniqueNodeName(node.data.label, existingNames);
+    const nodeWithUniqueName = {
+      ...node,
+      data: {
+        ...node.data,
+        label: uniqueName
+      }
+    };
+    return { nodes: [...state.nodes, nodeWithUniqueName] };
+  }),
 
   updateNodeData: (nodeId, data) =>
     set((state) => {
       const newNodes = state.nodes.map((n) =>
         n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n
+      );
+      const newSelectedNode =
+        state.selectedNode?.id === nodeId
+          ? newNodes.find((n) => n.id === nodeId) || null
+          : state.selectedNode;
+      return { nodes: newNodes, selectedNode: newSelectedNode };
+    }),
+
+  renameNode: (nodeId, newName) =>
+    set((state) => {
+      const otherNames = state.nodes
+        .filter(n => n.id !== nodeId)
+        .map(n => n.data.label);
+      const uniqueName = getUniqueNodeName(newName, otherNames);
+
+      const newNodes = state.nodes.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, label: uniqueName } } : n
       );
       const newSelectedNode =
         state.selectedNode?.id === nodeId
@@ -219,34 +270,46 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       return 'action';
     };
 
-    const rfNodes: Node<NodeData>[] = (payload.nodes || []).map((n, i) => ({
-      id: n.id,
-      type: 'workflow',
-      position: {
-        x: n.position?.[0] ?? 200 + i * 250,
-        y: n.position?.[1] ?? 200,
-      },
-      data: {
-        label: n.name,
-        type: n.type,
-        category: getCategory(n.type),
-        parameters: n.parameters || {},
-        credentials: n.credentials,
-        disabled: n.disabled,
-      },
-    }));
+    const usedNames: string[] = [];
+    const nameMap: Record<string, string> = {}; // Mapping from oldName -> uniqueNewName
+
+    const rfNodes: Node<NodeData>[] = (payload.nodes || []).map((n, i) => {
+      const originalName = n.name;
+      const uniqueName = getUniqueNodeName(originalName, usedNames);
+      usedNames.push(uniqueName);
+      nameMap[originalName] = uniqueName;
+
+      return {
+        id: n.id,
+        type: 'workflow',
+        position: {
+          x: n.position?.[0] ?? 200 + i * 250,
+          y: n.position?.[1] ?? 200,
+        },
+        data: {
+          label: uniqueName,
+          type: n.type,
+          category: getCategory(n.type),
+          parameters: n.parameters || {},
+          credentials: n.credentials,
+          disabled: n.disabled,
+        },
+      };
+    });
 
     const nodesByName = new Map(rfNodes.map((n) => [n.data.label, n]));
     const rfEdges: Edge[] = [];
 
     if (payload.connections) {
       for (const [sourceName, conn] of Object.entries(payload.connections)) {
-        const sourceNode = nodesByName.get(sourceName);
+        const uniqueSourceName = nameMap[sourceName] || sourceName;
+        const sourceNode = nodesByName.get(uniqueSourceName);
         if (!sourceNode || !conn.main) continue;
 
         for (let outputIdx = 0; outputIdx < conn.main.length; outputIdx++) {
           for (const target of conn.main[outputIdx]) {
-            const targetNode = nodesByName.get(target.node);
+            const uniqueTargetName = nameMap[target.node] || target.node;
+            const targetNode = nodesByName.get(uniqueTargetName);
             if (!targetNode) continue;
 
             rfEdges.push({

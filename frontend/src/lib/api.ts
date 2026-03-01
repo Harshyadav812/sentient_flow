@@ -22,7 +22,16 @@ async function request<T>(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(error.detail || `Request failed: ${res.status}`);
+    let errorMessage = `Request failed: ${res.status}`;
+
+    if (typeof error.detail === 'string') {
+      errorMessage = error.detail;
+    } else if (Array.isArray(error.detail)) {
+      // Handle FastAPI Pydantic validation errors
+      errorMessage = error.detail.map((err: any) => err.msg).join(', ');
+    }
+
+    throw new Error(errorMessage);
   }
 
   return res.json();
@@ -37,7 +46,15 @@ export async function login(email: string, password: string) {
   });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Login failed' }));
-    throw new Error(error.detail);
+    let errorMessage = 'Login failed';
+
+    if (typeof error.detail === 'string') {
+      errorMessage = error.detail;
+    } else if (Array.isArray(error.detail)) {
+      errorMessage = error.detail.map((err: any) => err.msg).join(', ');
+    }
+
+    throw new Error(errorMessage);
   }
   return res.json() as Promise<{ access_token: string; token_type: string }>;
 }

@@ -24,7 +24,9 @@ class ExecutionNode(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
 
-    execution_id: UUID = Field(foreign_key="execution.id", index=True)
+    execution_id: UUID = Field(
+        foreign_key="execution.id", index=True, ondelete="CASCADE"
+    )
 
     node_name: str = Field(index=True)
 

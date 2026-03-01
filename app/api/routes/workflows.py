@@ -1,13 +1,11 @@
-import json
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from sqlmodel import desc, select
+from sqlmodel import select
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models.execution import Execution
 from app.models.workflow import Workflow
 
 # from app.schemas.execution import ExecutionDetailRead, ExecutionRead
@@ -28,6 +26,7 @@ router = APIRouter()
 async def execute_workflow_stream(
     payload: WorkflowPayload, current_user: CurrentUser, session: SessionDep
 ):
+    """Only for testing purposes."""
     workflow_engine = WorkflowEngine(
         workflow=payload, session=session, user_id=current_user.id
     )
@@ -41,6 +40,7 @@ async def execute_workflow_stream(
 async def execute_workflow(
     payload: WorkflowPayload, current_user: CurrentUser, session: SessionDep
 ):
+    """Only for testing purposes."""
     workflow_engine = WorkflowEngine(
         workflow=payload, session=session, user_id=current_user.id
     )
@@ -123,7 +123,7 @@ def update_workflow(
 
     # Convert WorkflowPayload to dict for JSONB if data is being updated
     if "data" in update_data and update_data["data"] is not None:
-        update_data["data"] = workflow_in.data.model_dump()
+        update_data["data"] = workflow_in.data.model_dump()  # ty:ignore[possibly-missing-attribute]
 
     workflow.sqlmodel_update(update_data)
     session.add(workflow)

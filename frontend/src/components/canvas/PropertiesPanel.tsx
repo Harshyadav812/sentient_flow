@@ -5,7 +5,7 @@ import { NODE_DEFINITIONS, validateNodeParams, type ValidationError } from '@/co
 import { getCredentials } from '@/lib/api';
 
 export function PropertiesPanel() {
-  const { selectedNode, updateNodeData, removeNode, selectNode } =
+  const { selectedNode, updateNodeData, removeNode, selectNode, renameNode } =
     useWorkflowStore();
 
   const [isRawMode, setIsRawMode] = useState(false);
@@ -161,6 +161,9 @@ export function PropertiesPanel() {
             value={data.label}
             onChange={(e) =>
               updateNodeData(selectedNode.id, { label: e.target.value })
+            }
+            onBlur={(e) =>
+              renameNode(selectedNode.id, e.target.value)
             }
             style={inputStyle}
           />
