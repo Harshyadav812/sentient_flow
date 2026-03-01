@@ -26,7 +26,7 @@ class ExecutionNode(SQLModel, table=True):
 
     execution_id: UUID = Field(foreign_key="execution.id", index=True)
 
-    node_id: str = Field(index=True)
+    node_name: str = Field(index=True)
 
     status: NodeExecutionStatus = Field(default=NodeExecutionStatus.PENDING)
 
@@ -35,6 +35,7 @@ class ExecutionNode(SQLModel, table=True):
         default_factory=dict, sa_column=Column(JSON().with_variant(JSONB, "postgresql"))
     )
 
+    output_index: int | None = Field(default=None)
     output_data: Any = Field(
         default_factory=dict, sa_column=Column(JSON().with_variant(JSONB, "postgresql"))
     )

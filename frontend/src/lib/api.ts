@@ -132,7 +132,7 @@ export async function deleteCredential(id: string) {
 // Executions
 export interface ExecutionNodeData {
   id: string;
-  node_id: string;
+  node_name: string;
   status: 'pending' | 'running' | 'success' | 'error' | 'skipped';
   input_data: unknown;
   output_data: unknown;

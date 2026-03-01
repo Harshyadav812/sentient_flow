@@ -76,25 +76,35 @@ export function ExecutionsPage() {
     pending: { color: 'var(--color-text-muted)', label: 'Pending' },
   };
 
+  const parseUTC = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    return new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
+  };
+
   const formatTime = (dateStr: string | null) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleString(undefined, {
+    const d = parseUTC(dateStr);
+    if (!d) return '—';
+    return d.toLocaleString(undefined, {
       month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
   };
 
   const getDuration = (start: string | null, end: string | null) => {
-    if (!start || !end) return '—';
-    const ms = new Date(end).getTime() - new Date(start).getTime();
+    const s = parseUTC(start);
+    const e = parseUTC(end);
+    if (!s || !e) return '—';
+    const ms = e.getTime() - s.getTime();
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
   };
 
   const getRelativeTime = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
+    const d = parseUTC(dateStr);
+    if (!d) return '—';
+    const diff = Date.now() - d.getTime();
+    const mins = Math.max(0, Math.floor(diff / 60000));
     if (mins < 1) return 'just now';
     if (mins < 60) return `${mins}m ago`;
     const hours = Math.floor(mins / 60);
@@ -374,7 +384,7 @@ export function ExecutionsPage() {
                                   }}
                                 >
                                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: ns.color, flexShrink: 0 }} />
-                                  <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{node.node_id}</span>
+                                  <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{node.node_name}</span>
                                   <span style={{ fontSize: 11, color: ns.color, fontWeight: 500 }}>{ns.label}</span>
                                   {node.error_message && (
                                     <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-error)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

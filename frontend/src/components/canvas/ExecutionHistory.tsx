@@ -208,7 +208,7 @@ export function ExecutionHistory({ workflowId }: ExecutionHistoryProps) {
                       >
                         {nodeStatusIcon(node.status)}
                         <span style={{ fontWeight: 500, fontFamily: 'monospace' }}>
-                          {node.node_id}
+                          {node.node_name}
                         </span>
                         {node.error_message && (
                           <span style={{ color: 'var(--color-error)', fontSize: 10, marginLeft: 'auto' }}>

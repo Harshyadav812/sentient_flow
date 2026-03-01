@@ -10,9 +10,10 @@ from app.models.execution_node import NodeExecutionStatus
 
 class ExecutionNodeRead(SQLModel):
     id: UUID
-    node_id: str
+    node_name: str
     status: NodeExecutionStatus
     input_data: Any = None
+    output_index: int | None = None
     output_data: Any = None
     error_message: str | None = None
     started_at: datetime | None = None

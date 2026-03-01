@@ -13,7 +13,6 @@ import { WorkflowNode } from '@/components/canvas/WorkflowNode';
 import { DeletableEdge } from '@/components/canvas/DeletableEdge';
 import { NodePalette } from '@/components/canvas/NodePalette';
 import { PropertiesPanel } from '@/components/canvas/PropertiesPanel';
-import { ExecutionHistory } from '@/components/canvas/ExecutionHistory';
 import {
   useWorkflowStore,
   generateNodeId,
@@ -52,6 +51,7 @@ export function CanvasPage() {
   const [validationErrors, setValidationErrors] = useState<WorkflowError[]>([]);
   const [showErrors, setShowErrors] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [isStartingRun, setIsStartingRun] = useState(false);
 
   const {
     nodes,
@@ -68,7 +68,7 @@ export function CanvasPage() {
     deserializeFromPayload,
   } = useWorkflowStore();
 
-  const { isRunning, results, error, execute, clear } = useExecutionStore();
+  const { isRunning, results, error, execute, clear, overallStatus } = useExecutionStore();
 
   // Load workflow from API
   useEffect(() => {
@@ -175,30 +175,27 @@ export function CanvasPage() {
     setShowErrors(false);
     setValidationErrors([]);
     clear();
+    setIsStartingRun(true);
 
-    // Save before running so the backend has the latest graph
-    const payload = serializeToPayload();
-    if (id) {
-      try {
-        await updateWorkflow(id, { name: workflowName, data: payload });
-      } catch {
-        toast.error('Failed to save before running');
-        return;
+    try {
+      // Save before running so the backend has the latest graph
+      const payload = serializeToPayload();
+      if (id) {
+        try {
+          await updateWorkflow(id, { name: workflowName, data: payload });
+        } catch {
+          toast.error('Failed to save before running');
+          setIsStartingRun(false);
+          return;
+        }
       }
+
+      await execute(payload, id);
+    } finally {
+      setIsStartingRun(false);
     }
-
-    await execute(payload, id);
   };
 
-  // Get execution status for a node
-  const getNodeStatus = (label: string) => {
-    if (!results) return null;
-    const r = results[label] as Record<string, unknown> | undefined;
-    if (!r) return null;
-    if (r.status === 'skipped') return 'skipped';
-    if (r.error) return 'error';
-    return 'success';
-  };
 
   // Check if node has validation errors
   const errorNodeIds = new Set(validationErrors.map((e) => e.nodeId));
@@ -249,39 +246,36 @@ export function CanvasPage() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Execution status */}
-          {results && (
+          {(results || overallStatus) && (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
                 fontSize: 12,
-                color: error ? 'var(--color-error)' : 'var(--color-success)',
+                color: overallStatus === 'failed' || error ? 'var(--color-error)' : 'var(--color-success)',
               }}
             >
-              {error ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
-              {error ? 'Failed' : 'Complete'}
+              {overallStatus === 'failed' || error ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+              {overallStatus === 'failed' || error ? 'Failed' : 'Complete'}
             </div>
           )}
-
-          {/* Execution history dropdown */}
-          <ExecutionHistory workflowId={id} />
 
           {/* Run button */}
           <button
             onClick={handleRun}
-            disabled={isRunning}
+            disabled={isRunning || isStartingRun}
             style={{
               ...topBtnStyle,
-              background: isRunning
+              background: (isRunning || isStartingRun)
                 ? 'var(--color-surface-active)'
                 : 'var(--color-success)',
-              color: isRunning ? 'var(--color-text-muted)' : 'white',
+              color: (isRunning || isStartingRun) ? 'var(--color-text-muted)' : 'white',
               border: 'none',
               fontWeight: 600,
             }}
           >
-            {isRunning ? (
+            {(isRunning || isStartingRun) ? (
               <Loader2 size={14} className="animate-spin" />
             ) : (
               <Play size={14} />
@@ -397,113 +391,7 @@ export function CanvasPage() {
         <PropertiesPanel />
       </div>
 
-      {/* Execution results toast */}
-      {results && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 20,
-            right: 20,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 16,
-            width: 420,
-            maxHeight: 400,
-            overflowY: 'auto',
-            boxShadow: '0 8px 32px #000a',
-            zIndex: 100,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 10,
-            }}
-          >
-            <span style={{ fontWeight: 600, fontSize: 13 }}>
-              Execution Results
-            </span>
-            <button
-              onClick={clear}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--color-text-muted)',
-                cursor: 'pointer',
-                fontSize: 18,
-              }}
-            >
-              ×
-            </button>
-          </div>
-          {Object.entries(results).map(([node, result]) => {
-            const status = getNodeStatus(node);
-            const fullValue = typeof result === 'object'
-              ? JSON.stringify(result, null, 2)
-              : String(result);
-            return (
-              <details
-                key={node}
-                style={{
-                  marginBottom: 4,
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'var(--color-background)',
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                }}
-              >
-                <summary
-                  style={{
-                    padding: '6px 8px',
-                    cursor: 'pointer',
-                    listStyle: 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    userSelect: 'none',
-                  }}
-                >
-                  <span style={{
-                    fontSize: 8,
-                    color: 'var(--color-text-muted)',
-                    transition: 'transform 0.15s ease',
-                  }}>▶</span>
-                  <span
-                    style={{
-                      color:
-                        status === 'error'
-                          ? 'var(--color-error)'
-                          : status === 'skipped'
-                          ? 'var(--color-text-muted)'
-                          : 'var(--color-success)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {node}
-                  </span>
-                </summary>
-                <pre
-                  style={{
-                    padding: '6px 8px 8px 22px',
-                    margin: 0,
-                    color: 'var(--color-text-secondary)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontSize: 11,
-                    lineHeight: 1.5,
-                    borderTop: '1px solid var(--color-border)',
-                  }}
-                >
-                  {fullValue}
-                </pre>
-              </details>
-            );
-          })}
-        </div>
-      )}
+
     </div>
   );
 }

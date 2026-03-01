@@ -9,7 +9,8 @@ from sqlmodel import desc, select
 from app.api.deps import CurrentUser, SessionDep
 from app.models.execution import Execution
 from app.models.workflow import Workflow
-from app.schemas.execution import ExecutionDetailRead, ExecutionRead
+
+# from app.schemas.execution import ExecutionDetailRead, ExecutionRead
 from app.schemas.nodes import WorkflowPayload
 from app.schemas.workflow import (
     ExecuteResponse,
@@ -193,47 +194,49 @@ async def run_workflow(
     return ExecuteResponse(status="success", results=final_state)
 
 
-@router.get("/{workflow_id}/executions", response_model=list[ExecutionRead])
-def read_workflow_executions(
-    workflow_id: UUID,
-    current_user: CurrentUser,
-    session: SessionDep,
-    offset: int = 0,
-    limit: Annotated[int, Query(le=20)] = 20,
-):
-    """List all executions logs for a specific workflow."""
-    workflow = session.get(Workflow, workflow_id)
-    if not workflow or workflow.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+# not being used anymore
 
-    statement = (
-        select(Execution)
-        .where(Execution.workflow_id == workflow_id)
-        .order_by(desc(Execution.created_at))
-        .offset(offset)
-        .limit(limit)
-    )
+# @router.get("/{workflow_id}/executions", response_model=list[ExecutionRead])
+# def read_workflow_executions(
+#     workflow_id: UUID,
+#     current_user: CurrentUser,
+#     session: SessionDep,
+#     offset: int = 0,
+#     limit: Annotated[int, Query(le=20)] = 20,
+# ):
+#     """List all executions logs for a specific workflow."""
+#     workflow = session.get(Workflow, workflow_id)
+#     if not workflow or workflow.owner_id != current_user.id:
+#         raise HTTPException(status_code=404, detail="Workflow not found")
 
-    return session.exec(statement).all()
+#     statement = (
+#         select(Execution)
+#         .where(Execution.workflow_id == workflow_id)
+#         .order_by(desc(Execution.created_at))
+#         .offset(offset)
+#         .limit(limit)
+#     )
+
+#     return session.exec(statement).all()
 
 
-@router.get(
-    "/{workflow_id}/executions/{execution_id}", response_model=ExecutionDetailRead
-)
-def read_execution_detail(
-    workflow_id: UUID,
-    execution_id: UUID,
-    current_user: CurrentUser,
-    session: SessionDep,
-):
-    """Get the full details and individual node logs of a specific execution."""
-    execution = session.get(Execution, execution_id)
+# @router.get(
+#     "/{workflow_id}/executions/{execution_id}", response_model=ExecutionDetailRead
+# )
+# def read_execution_detail(
+#     workflow_id: UUID,
+#     execution_id: UUID,
+#     current_user: CurrentUser,
+#     session: SessionDep,
+# ):
+#     """Get the full details and individual node logs of a specific execution."""
+#     execution = session.get(Execution, execution_id)
 
-    if (
-        not execution
-        or execution.workflow_id != workflow_id
-        or execution.owner_id != current_user.id
-    ):
-        raise HTTPException(status_code=404, detail="Execution not found")
+#     if (
+#         not execution
+#         or execution.workflow_id != workflow_id
+#         or execution.owner_id != current_user.id
+#     ):
+#         raise HTTPException(status_code=404, detail="Execution not found")
 
-    return execution
+#     return execution

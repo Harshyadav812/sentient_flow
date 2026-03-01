@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import type { NodeData } from '@/stores/workflowStore';
+import { useWorkflowStore, type NodeData } from '@/stores/workflowStore';
 import { useExecutionStore } from '@/stores/executionStore';
+import { validateWorkflow } from '@/lib/validateWorkflow';
+import { updateWorkflow } from '@/lib/api';
+import { toast } from 'sonner';
 import {
   Zap, Globe, GitBranch, Printer, Clock, Settings, Merge, Loader2,
-  Code2, Repeat, Webhook, FileText, BrainCircuit, Tags, FileSearch,
+  Code2, Repeat, Webhook, FileText, BrainCircuit, Tags, FileSearch, RotateCcw,
 } from 'lucide-react';
 
 const categoryColors: Record<string, string> = {
@@ -39,6 +43,45 @@ export function WorkflowNode({ data, selected }: NodeProps) {
   const runningNode = useExecutionStore(state => state.runningNode);
   const nodeStatuses = useExecutionStore(state => state.nodeStatuses);
   
+  const executionId = useExecutionStore(state => state.executionId);
+  const resume = useExecutionStore(state => state.resume);
+  const overallStatus = useExecutionStore(state => state.overallStatus);
+  const isGlobalRunning = useExecutionStore(state => state.isRunning);
+
+  const {
+    nodes,
+    edges,
+    workflowName,
+    workflowId,
+    serializeToPayload,
+  } = useWorkflowStore();
+
+  const [isStartingRun, setIsStartingRun] = useState(false);
+
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!executionId) return;
+
+    const result = validateWorkflow(nodes, edges);
+    if (!result.valid) {
+      toast.error(`Validation failed: ${result.errors.length} error(s)`);
+      return;
+    }
+
+    setIsStartingRun(true);
+    try {
+      const payload = serializeToPayload();
+      if (workflowId) {
+        await updateWorkflow(workflowId, { name: workflowName, data: payload });
+      }
+      await resume(executionId);
+    } catch (err) {
+      toast.error('Failed to save before resuming');
+    } finally {
+      setIsStartingRun(false);
+    }
+  };
+
   const isRunning = runningNode === nodeData.label;
   const status = nodeStatuses[nodeData.label];
 
@@ -147,6 +190,29 @@ export function WorkflowNode({ data, selected }: NodeProps) {
            <div style={{ width: 6, height: 6, borderRadius: '50%', background: nodeData.disabled ? 'var(--color-text-muted)' : 'var(--color-border)' }} />
         )}
         {isRunning ? 'Running...' : status === 'success' ? 'Success' : status === 'error' ? 'Failed' : nodeData.disabled ? 'Disabled' : 'Ready'}
+
+        <div style={{ flex: 1 }} />
+        {status === 'error' && overallStatus === 'failed' && executionId && (
+          <button
+            onClick={handleRetry}
+            disabled={isGlobalRunning || isStartingRun}
+            title="Retry from this node"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 4,
+              cursor: (isGlobalRunning || isStartingRun) ? 'not-allowed' : 'pointer',
+              color: 'var(--color-error)',
+              display: 'flex',
+              alignItems: 'center',
+              borderRadius: 4,
+            }}
+            onMouseEnter={e => { if (!(isGlobalRunning || isStartingRun)) e.currentTarget.style.background = 'rgba(248, 113, 113, 0.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <RotateCcw size={14} className={isStartingRun ? "animate-spin" : ""} />
+          </button>
+        )}
       </div>
 
       {/* Output handles */}
