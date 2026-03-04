@@ -8,7 +8,7 @@ import {
   deleteWorkflow,
   type WorkflowData,
 } from '@/lib/api';
-import { Plus, Trash2, Upload, Loader2, Workflow, Search } from 'lucide-react';
+import { Plus, Trash2, Upload, Loader2, Search } from 'lucide-react';
 import { ImportWorkflowModal } from '@/components/ImportWorkflowModal';
 import { Button } from '@/components/ui/button';
 
@@ -87,6 +87,7 @@ export function DashboardPage() {
 
   const nodeCount = (wf: WorkflowData) => {
     try {
+      // @ts-expect-error wf.data typing might be too loose
       return wf.data?.nodes?.length || 0;
     } catch { return 0; }
   };
@@ -145,7 +146,7 @@ export function DashboardPage() {
         ) : workflows.length === 0 ? (
           <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-[#2e2e33] bg-[#1f1f23]/50 p-12 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#2a2a2f] mb-4">
-              <Workflow className="h-7 w-7 text-zinc-500" />
+              <img src="/favicon.svg" alt="Workflow Icon" className="h-7 w-7 opacity-60 grayscale" />
             </div>
             <h3 className="text-base font-medium text-zinc-200 mb-1.5">No workflows yet</h3>
             <p className="text-[13px] text-zinc-500 max-w-xs mb-5">
@@ -180,7 +181,7 @@ export function DashboardPage() {
                 {/* Name */}
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#ff6d5a]/10">
-                    <Workflow className="h-4 w-4 text-[#ff6d5a]" />
+                    <img src="/favicon.svg" alt="Workflow Icon" className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
                     <div className="text-[13px] font-medium text-zinc-200 truncate">

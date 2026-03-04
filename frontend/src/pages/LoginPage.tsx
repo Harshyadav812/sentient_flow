@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/authStore";
 import { register } from "@/lib/api";
-import { Workflow, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -70,8 +70,8 @@ export function LoginPage() {
       <div className="w-[400px] bg-[#1f1f23] border border-[#2e2e33] rounded-2xl p-10 shadow-[0_20px_40px_rgba(0,0,0,0.4)]">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="bg-[#ff6d5a] rounded-lg p-2 flex shadow-[0_4px_12px_rgba(255,109,90,0.2)]">
-            <Workflow size={20} color="white" />
+          <div className="flex items-center justify-center">
+            <img src="/favicon.svg" alt="Sentient Flow Logo" width={32} height={32} />
           </div>
           <span className="text-xl font-bold tracking-tight text-zinc-100">
             Sentient Flow

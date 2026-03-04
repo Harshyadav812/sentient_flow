@@ -6,8 +6,7 @@ import {
     Activity,
     Key,
     LogOut,
-    PanelLeft,
-    Workflow
+    PanelLeft
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import clsx from 'clsx';
@@ -40,8 +39,8 @@ export function AppLayout() {
                     "flex items-center shrink-0 border-b border-[#2e2e33]",
                     isCollapsed ? "h-13 justify-center" : "h-13 px-4 gap-2.5"
                 )}>
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-node-trigger text-white">
-                        <Workflow size={15} strokeWidth={2.5} />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center">
+                        <img src="/favicon.svg" alt="Sentient Flow Logo" width={28} height={28} />
                     </div>
                     {!isCollapsed && (
                         <span className="font-semibold text-[13px] tracking-tight text-zinc-100 truncate">
