@@ -32,7 +32,9 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
         token_data = payload.get("sub")
 
-        if token_data is None:
+        # Tokens issued before "type" existed are access tokens; reject 2FA
+        # challenge tokens so they can't be used as a session.
+        if token_data is None or payload.get("type", "access") != "access":
             raise HTTPException(
                 status_code=403, detail="Could not validate credentials"
             )

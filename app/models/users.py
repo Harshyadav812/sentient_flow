@@ -17,6 +17,11 @@ class User(UserBase, table=True):
 
     hashed_password: str
 
+    # Two-factor auth: secret is encrypted with CipherService. A secret may
+    # exist while totp_enabled is False (setup started but not confirmed).
+    totp_secret: str | None = Field(default=None)
+    totp_enabled: bool = Field(default=False)
+
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = Field(
         default=None, sa_column_kwargs={"onupdate": lambda: datetime.now(UTC)}

@@ -48,3 +48,19 @@ def rate_limit_register(request: Request) -> None:
     """Dependency: max 3 registrations per minute per IP."""
     ip = request.client.host if request.client else "unknown"
     rate_limiter.check(ip, max_requests=3, window_seconds=60)
+
+
+def rate_limit_scoped(scope: str, max_requests: int, window_seconds: int = 60):
+    """Build a dependency with its own per-IP bucket, separate from login."""
+
+    def dependency(request: Request) -> None:
+        ip = request.client.host if request.client else "unknown"
+        rate_limiter.check(
+            f"{scope}:{ip}", max_requests=max_requests, window_seconds=window_seconds
+        )
+
+    return dependency
+
+
+rate_limit_two_factor = rate_limit_scoped("2fa", max_requests=5)
+rate_limit_account = rate_limit_scoped("account", max_requests=10)

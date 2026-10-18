@@ -7,7 +7,9 @@ from app.core.config import settings
 
 
 def create_access_token(
-    subject: str | Any, expires_delta: timedelta | None = None
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    token_type: str = "access",
 ) -> str:
     """Create a JWT access token."""
     if expires_delta:
@@ -17,7 +19,7 @@ def create_access_token(
             minutes=settings.access_token_expire_minutes
         )
 
-    to_encode = {"exp": expire, "sub": str(subject)}
+    to_encode = {"exp": expire, "sub": str(subject), "type": token_type}
     encoded_jwt = jwt.encode(
         to_encode,
         settings.secret_key.get_secret_value(),
