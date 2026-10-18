@@ -12,11 +12,17 @@ import {
 } from '@xyflow/react';
 import { updateWorkflow } from '@/lib/api';
 import { toast } from 'sonner';
+import { getCategory, getDefaultParams, NODE_DEFINITIONS, type Category } from '@/config/nodeDefinitions';
+
+export interface InsertTarget {
+  nodeId: string;
+  handle: string;
+}
 
 export interface NodeData {
   label: string;
   type: string;
-  category: 'trigger' | 'action' | 'logic' | 'output' | 'ai';
+  category: Category;
   parameters: Record<string, unknown>;
   credentials?: Record<string, unknown>;
   disabled?: boolean;
@@ -47,8 +53,16 @@ interface WorkflowState {
   clear: () => void;
   layoutNodes: () => void;
 
-  saveStatus: 'idle' | 'saving' | 'saved';
-  saveWorkflow: () => Promise<void>;
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  savedSnapshot: string;
+  saveWorkflow: (opts?: { silent?: boolean }) => Promise<void>;
+
+  paletteOpen: boolean;
+  paletteSession: number;
+  insertFrom: InsertTarget | null;
+  openPalette: (insertFrom?: InsertTarget | null) => void;
+  closePalette: () => void;
+  createNode: (type: string, position: { x: number; y: number }, connectFrom?: InsertTarget | null) => string;
 
   // Serialize to/from backend format
   serializeToPayload: () => Record<string, unknown>;
@@ -206,21 +220,62 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   setSettingsNodeId: (id) => set({ settingsNodeId: id }),
 
   saveStatus: 'idle',
-  saveWorkflow: async () => {
+  savedSnapshot: '',
+  saveWorkflow: async ({ silent = false } = {}) => {
     const { workflowId, workflowName, serializeToPayload } = get();
     if (!workflowId) return;
     set({ saveStatus: 'saving' });
+    const payload = serializeToPayload();
+    const snapshot = JSON.stringify(payload);
     try {
-      const payload = serializeToPayload();
       await updateWorkflow(workflowId, { name: workflowName, data: payload });
-      set({ saveStatus: 'saved' });
-      toast.success('Workflow saved');
-      setTimeout(() => set({ saveStatus: 'idle' }), 2000);
+      set({ saveStatus: 'saved', savedSnapshot: snapshot });
+      if (!silent) toast.success('Workflow saved');
     } catch (err) {
       console.error('Save failed:', err);
-      set({ saveStatus: 'idle' });
+      set({ saveStatus: 'error' });
       toast.error('Failed to save workflow');
     }
+  },
+
+  paletteOpen: false,
+  paletteSession: 0,
+  insertFrom: null,
+  openPalette: (insertFrom = null) =>
+    set((s) => ({ paletteOpen: true, insertFrom, paletteSession: s.paletteSession + 1 })),
+  closePalette: () => set({ paletteOpen: false, insertFrom: null }),
+
+  createNode: (type, position, connectFrom = null) => {
+    const def = NODE_DEFINITIONS[type];
+    const { nodes, edges } = get();
+    const id = generateNodeId();
+    const label = getUniqueNodeName(def?.defaultLabel ?? type, nodes.map((n) => n.data.label));
+    const node: Node<NodeData> = {
+      id,
+      type: 'workflow',
+      position,
+      selected: true,
+      data: { label, type, category: getCategory(type), parameters: getDefaultParams(type) },
+    };
+    const source = connectFrom && nodes.find((n) => n.id === connectFrom.nodeId);
+    const canConnect = source && def?.category !== 'trigger';
+    set({
+      nodes: [...nodes.map((n) => (n.selected ? { ...n, selected: false } : n)), node],
+      edges: canConnect
+        ? [
+            ...edges,
+            {
+              id: `e-${source.id}-${id}-${connectFrom.handle}`,
+              source: source.id,
+              sourceHandle: connectFrom.handle,
+              target: id,
+              targetHandle: 'input-0',
+            },
+          ]
+        : edges,
+      selectedNode: node,
+    });
+    return id;
   },
 
   onNodesChange: (changes) =>
@@ -228,7 +283,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   onEdgesChange: (changes) =>
     set({ edges: applyEdgeChanges(changes, get().edges) }),
   onConnect: (connection) =>
-    set({ edges: addEdge({ ...connection, animated: true }, get().edges) }),
+    set({ edges: addEdge(connection, get().edges) }),
 
   addNode: (node) => set((state) => {
     const existingNames = state.nodes.map(n => n.data.label);
@@ -303,6 +358,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       ),
       selectedNode:
         get().selectedNode?.id === nodeId ? null : get().selectedNode,
+      settingsNodeId: get().settingsNodeId === nodeId ? null : get().settingsNodeId,
     }),
 
   selectNode: (node) => set({ selectedNode: node }),
@@ -421,15 +477,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       >;
     };
 
-    const getCategory = (type: string): NodeData['category'] => {
-      if (type.includes('trigger')) return 'trigger';
-      if (type === 'if' || type === 'switch' || type === 'merge' || type === 'condition')
-        return 'logic';
-      if (type === 'print' || type === 'set') return 'output';
-      if (type.startsWith('llm_')) return 'ai';
-      return 'action';
-    };
-
     const usedNames: string[] = [];
     const nameMap: Record<string, string> = {}; // Mapping from oldName -> uniqueNewName
 
@@ -478,7 +525,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
               target: targetNode.id,
               sourceHandle: `output-${outputIdx}`,
               targetHandle: 'input-0',
-              animated: true,
             });
           }
         }
@@ -490,7 +536,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       nodes: rfNodes,
       edges: rfEdges,
       selectedNode: null,
+      settingsNodeId: null,
+      saveStatus: 'idle',
     });
+    set({ savedSnapshot: JSON.stringify(get().serializeToPayload()) });
 
     // Auto-layout if nodes seem to be stacked at origin
     if (rfNodes.length > 1 && rfNodes.every(n => n.position.x === 0 && n.position.y === 0)) {

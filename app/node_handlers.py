@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+from .data_handlers import DATA_HANDLERS
 from .tasks import (
     do_calc,
     do_condition,
@@ -407,6 +408,7 @@ SIMPLE_HANDLERS = {
     "llm_chat": handle_llm_chat,
     "llm_classify": handle_llm_classify,
     "llm_summarize": handle_llm_summarize,
+    **DATA_HANDLERS,
 }
 
 N8N_TYPE_MAPPING = {

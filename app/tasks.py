@@ -16,6 +16,13 @@ def do_print(content):
 
 def do_calc(op: str = "add", *args):
     """Perform math operations on a list of numbers."""
+    result = _do_calc(op, *args)
+    if isinstance(result, float) and result.is_integer():
+        return int(result)
+    return result
+
+
+def _do_calc(op: str = "add", *args):
     if not args:
         return 0
 

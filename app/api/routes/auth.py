@@ -31,6 +31,7 @@ from app.schemas.users import (
     UserUpdate,
 )
 from app.services.cipher import CipherService
+from app.starter_workflows import add_starter_workflows
 
 router = APIRouter()
 cipher = CipherService()
@@ -71,6 +72,8 @@ def register(user_in: UserCreate, session: SessionDep):
     )
 
     session.add(user)
+    session.flush()
+    add_starter_workflows(session, user.id)
     session.commit()
     session.refresh(user)
     return user

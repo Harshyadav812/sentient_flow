@@ -2,6 +2,8 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Zap, Globe, GitBranch, Printer, Clock, Settings, Merge, Calculator,
   Code2, Repeat, Webhook, FileText, BrainCircuit, Tags, FileSearch,
+  Filter, ArrowDownUp, ListEnd, Sigma, Type, CalendarClock, Braces,
+  Fingerprint, OctagonX, Split,
 } from 'lucide-react';
 
 // =============================================================================
@@ -10,7 +12,18 @@ import {
 
 export type PropertyType = 'string' | 'number' | 'boolean' | 'options' | 'json' | 'json-array' | 'code' | 'credential';
 
-export type Category = 'trigger' | 'action' | 'logic' | 'output' | 'ai';
+export type Category = 'trigger' | 'action' | 'data' | 'logic' | 'output' | 'ai';
+
+export const CATEGORY_META: Record<Category, { label: string; color: string }> = {
+  trigger: { label: 'Triggers', color: '#ff6d5a' },
+  action: { label: 'Actions', color: '#3b82f6' },
+  data: { label: 'Data & Transform', color: '#06b6d4' },
+  logic: { label: 'Flow & Logic', color: '#a855f7' },
+  output: { label: 'Output', color: '#10b981' },
+  ai: { label: 'AI', color: '#a78bfa' },
+};
+
+export const CATEGORY_ORDER: Category[] = ['trigger', 'action', 'data', 'logic', 'output', 'ai'];
 
 export interface NodeProperty {
   name: string;
@@ -25,6 +38,8 @@ export interface NodeProperty {
   max?: number;              // For number fields
   pattern?: string;          // Regex validation for string fields
   patternMessage?: string;   // Custom error message when pattern fails
+  showWhen?: { field: string; values: unknown[] };
+  multiline?: boolean;
 }
 
 export interface NodeDefinition {
@@ -33,8 +48,30 @@ export interface NodeDefinition {
   description: string;       // Shown in palette tooltip + properties header
   category: Category;
   icon: LucideIcon;
-  outputCount: number;       // 1 for most, 2 for IF/condition, N for switch
   properties: NodeProperty[];
+  hidden?: boolean;          // Still runs, but not offered in the palette
+  keywords?: string;         // Extra search terms for the palette
+}
+
+export function isPropertyVisible(
+  nodeType: string,
+  prop: NodeProperty,
+  params: Record<string, unknown>
+): boolean {
+  if (!prop.showWhen) return true;
+  const { field, values } = prop.showWhen;
+  const fallback = NODE_DEFINITIONS[nodeType]?.properties.find((p) => p.name === field)?.default;
+  return values.includes(params[field] ?? fallback);
+}
+
+/** Labels for each output handle. A single unlabeled output is `['']`. */
+export function getOutputLabels(type: string, params: Record<string, unknown>): string[] {
+  if (type === 'if' || type === 'condition') return ['true', 'false'];
+  if (type === 'switch') {
+    const cases = Array.isArray(params.cases) ? params.cases : [];
+    return [...cases.map((c) => String(c)), 'default'];
+  }
+  return [''];
 }
 
 // =============================================================================
@@ -56,6 +93,7 @@ export function validateNodeParams(
   const errors: ValidationError[] = [];
 
   for (const prop of def.properties) {
+    if (!isPropertyVisible(nodeType, prop, params)) continue;
     const value = params[prop.name];
 
     // Required check
@@ -98,6 +136,38 @@ export function validateNodeParams(
 // NODE DEFINITIONS REGISTRY
 // =============================================================================
 
+const COMPARE_OPTIONS = [
+  { name: 'Equals (==)', value: '==' },
+  { name: 'Not Equals (!=)', value: '!=' },
+  { name: 'Greater Than (>)', value: '>' },
+  { name: 'Less Than (<)', value: '<' },
+  { name: 'Greater or Equal (>=)', value: '>=' },
+  { name: 'Less or Equal (<=)', value: '<=' },
+  { name: 'Contains', value: 'contains' },
+  { name: 'Starts With', value: 'startswith' },
+  { name: 'Ends With', value: 'endswith' },
+];
+
+const listProp: NodeProperty = {
+  name: 'list',
+  displayName: 'List',
+  type: 'string',
+  default: '',
+  placeholder: "$'HTTP Request' or leave empty",
+  description: "A $ reference to a list. Leave empty to use the previous node's output.",
+};
+
+const fieldProp = (description: string, placeholder = 'status'): NodeProperty => ({
+  name: 'field',
+  displayName: 'Field',
+  type: 'string',
+  default: '',
+  placeholder,
+  description,
+});
+
+const DATE_FORMAT_HINT = 'Optional strftime pattern, e.g. %Y-%m-%d or %d %b %Y %H:%M. Empty = ISO 8601.';
+
 export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
 
   // ─── TRIGGERS ──────────────────────────────────────────────────────────────
@@ -108,7 +178,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Manually starts the workflow. Every workflow needs at least one trigger.',
     category: 'trigger',
     icon: Zap,
-    outputCount: 1,
     properties: [],
   },
 
@@ -118,7 +187,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Starts workflow when an HTTP request is received at the configured path.',
     category: 'trigger',
     icon: Webhook,
-    outputCount: 1,
     properties: [
       {
         name: 'path',
@@ -162,7 +230,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Make an HTTP request to any API endpoint.',
     category: 'action',
     icon: Globe,
-    outputCount: 1,
     properties: [
       {
         name: 'url',
@@ -239,7 +306,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Perform math operations on numbers.',
     category: 'action',
     icon: Calculator,
-    outputCount: 1,
     properties: [
       {
         name: 'operation',
@@ -272,7 +338,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Pause workflow execution for a specified duration.',
     category: 'action',
     icon: Clock,
-    outputCount: 1,
     properties: [
       {
         name: 'seconds',
@@ -293,7 +358,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Execute a Python expression. Has access to input data via the "input" variable.',
     category: 'action',
     icon: Code2,
-    outputCount: 1,
     properties: [
       {
         name: 'expression',
@@ -320,10 +384,10 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   if: {
     type: 'if',
     defaultLabel: 'IF',
-    description: 'Branch workflow based on a condition. TRUE = output 0 (green), FALSE = output 1 (red).',
+    description: 'Send data down the true or false branch based on a comparison.',
+    keywords: 'condition branch compare',
     category: 'logic',
     icon: GitBranch,
-    outputCount: 2,
     properties: [
       {
         name: 'left',
@@ -369,8 +433,8 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     defaultLabel: 'Condition',
     description: 'Alias for IF node. Branches TRUE (output 0) / FALSE (output 1).',
     category: 'logic',
+    hidden: true,
     icon: GitBranch,
-    outputCount: 2,
     properties: [
       {
         name: 'left',
@@ -412,10 +476,10 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   switch: {
     type: 'switch',
     defaultLabel: 'Switch',
-    description: 'Route to different outputs based on a value matching cases.',
+    description: 'Send data to a different output for each matching case. Anything else goes to "default".',
     category: 'logic',
-    icon: GitBranch,
-    outputCount: 3,
+    icon: Split,
+    keywords: 'route case router',
     properties: [
       {
         name: 'value',
@@ -433,7 +497,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
         default: [],
         required: true,
         placeholder: '["active", "paused", "stopped"]',
-        description: 'Array of values to match. Each case maps to an output index.',
+        description: 'Each case gets its own output on the node, plus a "default" output for no match.',
       },
     ],
   },
@@ -444,7 +508,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Combine data from multiple incoming branches into one.',
     category: 'logic',
     icon: Merge,
-    outputCount: 1,
     properties: [
       {
         name: 'mode',
@@ -462,10 +525,10 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
   loop: {
     type: 'loop',
     defaultLabel: 'Loop',
-    description: 'Iterate over a list from the previous node. Each item is passed downstream one at a time.',
+    description: 'Wraps the previous output in { items, count }. Superseded by Filter, Sort and Limit.',
     category: 'logic',
+    hidden: true,
     icon: Repeat,
-    outputCount: 1,
     properties: [
       {
         name: 'listExpression',
@@ -488,6 +551,312 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     ],
   },
 
+  stop_error: {
+    type: 'stop_error',
+    defaultLabel: 'Stop & Error',
+    description: 'Stop the workflow and mark the run as failed with your own message.',
+    category: 'logic',
+    icon: OctagonX,
+    keywords: 'fail throw abort halt',
+    properties: [
+      {
+        name: 'message',
+        displayName: 'Error Message',
+        type: 'string',
+        default: '',
+        required: true,
+        placeholder: 'No orders found for today',
+      },
+    ],
+  },
+
+  // ─── DATA & TRANSFORM ──────────────────────────────────────────────────────
+
+  filter: {
+    type: 'filter',
+    defaultLabel: 'Filter',
+    description: 'Keep only the list items that match a condition.',
+    category: 'data',
+    icon: Filter,
+    keywords: 'where keep remove list items',
+    properties: [
+      listProp,
+      fieldProp('Field to check on each item. Use dots for nested fields (address.city). Empty = the item itself.'),
+      {
+        name: 'operator',
+        displayName: 'Condition',
+        type: 'options',
+        default: '==',
+        options: [
+          ...COMPARE_OPTIONS,
+          { name: 'Is Empty', value: 'is_empty' },
+          { name: 'Is Not Empty', value: 'is_not_empty' },
+        ],
+      },
+      {
+        name: 'value',
+        displayName: 'Value',
+        type: 'string',
+        default: '',
+        placeholder: 'open',
+        showWhen: { field: 'operator', values: COMPARE_OPTIONS.map((o) => o.value) },
+      },
+    ],
+  },
+
+  sort: {
+    type: 'sort',
+    defaultLabel: 'Sort',
+    description: 'Sort list items by a field, ascending or descending.',
+    category: 'data',
+    icon: ArrowDownUp,
+    keywords: 'order list items',
+    properties: [
+      listProp,
+      fieldProp('Field to sort by. Items missing it go last. Empty = sort the items themselves.', 'priority'),
+      {
+        name: 'order',
+        displayName: 'Order',
+        type: 'options',
+        default: 'asc',
+        options: [
+          { name: 'Ascending (A → Z, 1 → 9)', value: 'asc' },
+          { name: 'Descending (Z → A, 9 → 1)', value: 'desc' },
+        ],
+      },
+    ],
+  },
+
+  limit: {
+    type: 'limit',
+    defaultLabel: 'Limit',
+    description: 'Keep only the first or last N items of a list.',
+    category: 'data',
+    icon: ListEnd,
+    keywords: 'top first last take slice',
+    properties: [
+      listProp,
+      { name: 'count', displayName: 'Max Items', type: 'number', default: 10, min: 0, max: 10000, required: true },
+      {
+        name: 'keep',
+        displayName: 'Keep',
+        type: 'options',
+        default: 'first',
+        options: [
+          { name: 'First items', value: 'first' },
+          { name: 'Last items', value: 'last' },
+        ],
+      },
+    ],
+  },
+
+  aggregate: {
+    type: 'aggregate',
+    defaultLabel: 'Aggregate',
+    description: 'Reduce a list to one value: count, sum, average, min, max, join or unique.',
+    category: 'data',
+    icon: Sigma,
+    keywords: 'sum total count average min max join reduce',
+    properties: [
+      listProp,
+      {
+        name: 'operation',
+        displayName: 'Operation',
+        type: 'options',
+        default: 'count',
+        options: [
+          { name: 'Count', value: 'count' },
+          { name: 'Sum', value: 'sum' },
+          { name: 'Average', value: 'average' },
+          { name: 'Minimum', value: 'min' },
+          { name: 'Maximum', value: 'max' },
+          { name: 'Join into text', value: 'join' },
+          { name: 'Unique values', value: 'unique' },
+        ],
+      },
+      fieldProp('Field to read from each item. Empty = use the items themselves.', 'price'),
+      {
+        name: 'separator',
+        displayName: 'Separator',
+        type: 'string',
+        default: ', ',
+        showWhen: { field: 'operation', values: ['join'] },
+      },
+    ],
+  },
+
+  text_ops: {
+    type: 'text_ops',
+    defaultLabel: 'Text',
+    description: 'Change case, trim, replace, split, truncate or count text.',
+    category: 'data',
+    icon: Type,
+    keywords: 'string uppercase lowercase replace split trim length words',
+    properties: [
+      {
+        name: 'text',
+        displayName: 'Text',
+        type: 'string',
+        default: '',
+        placeholder: "$'AI Chat'.text or leave empty",
+        description: "Leave empty to use the previous node's output.",
+      },
+      {
+        name: 'operation',
+        displayName: 'Operation',
+        type: 'options',
+        default: 'uppercase',
+        options: [
+          { name: 'UPPERCASE', value: 'uppercase' },
+          { name: 'lowercase', value: 'lowercase' },
+          { name: 'Title Case', value: 'title' },
+          { name: 'Trim whitespace', value: 'trim' },
+          { name: 'Replace', value: 'replace' },
+          { name: 'Split into list', value: 'split' },
+          { name: 'Truncate', value: 'truncate' },
+          { name: 'Length (characters)', value: 'length' },
+          { name: 'Word count', value: 'word_count' },
+        ],
+      },
+      { name: 'find', displayName: 'Find', type: 'string', default: '', required: true, showWhen: { field: 'operation', values: ['replace'] } },
+      { name: 'replace_with', displayName: 'Replace With', type: 'string', default: '', showWhen: { field: 'operation', values: ['replace'] } },
+      { name: 'separator', displayName: 'Separator', type: 'string', default: ',', showWhen: { field: 'operation', values: ['split'] } },
+      { name: 'max_length', displayName: 'Max Length', type: 'number', default: 100, min: 0, showWhen: { field: 'operation', values: ['truncate'] } },
+    ],
+  },
+
+  datetime: {
+    type: 'datetime',
+    defaultLabel: 'Date & Time',
+    description: 'Get the current time, format dates, add or subtract time, or measure the gap between two dates.',
+    category: 'data',
+    icon: CalendarClock,
+    keywords: 'date time now today timestamp format duration',
+    properties: [
+      {
+        name: 'operation',
+        displayName: 'Operation',
+        type: 'options',
+        default: 'now',
+        options: [
+          { name: 'Current date & time', value: 'now' },
+          { name: 'Format a date', value: 'format' },
+          { name: 'Add time', value: 'add' },
+          { name: 'Subtract time', value: 'subtract' },
+          { name: 'Difference between dates', value: 'difference' },
+        ],
+      },
+      {
+        name: 'date',
+        displayName: 'Date',
+        type: 'string',
+        default: '',
+        placeholder: '2026-01-31T09:00:00Z',
+        description: 'ISO 8601 date or Unix timestamp. Empty = now (UTC).',
+        showWhen: { field: 'operation', values: ['format', 'add', 'subtract', 'difference'] },
+      },
+      {
+        name: 'end_date',
+        displayName: 'End Date',
+        type: 'string',
+        default: '',
+        placeholder: '2026-02-14T09:00:00Z',
+        description: 'Empty = now (UTC).',
+        showWhen: { field: 'operation', values: ['difference'] },
+      },
+      {
+        name: 'amount',
+        displayName: 'Amount',
+        type: 'number',
+        default: 1,
+        showWhen: { field: 'operation', values: ['add', 'subtract'] },
+      },
+      {
+        name: 'unit',
+        displayName: 'Unit',
+        type: 'options',
+        default: 'days',
+        options: ['seconds', 'minutes', 'hours', 'days', 'weeks'].map((u) => ({ name: u[0].toUpperCase() + u.slice(1), value: u })),
+        showWhen: { field: 'operation', values: ['add', 'subtract', 'difference'] },
+      },
+      {
+        name: 'format',
+        displayName: 'Output Format',
+        type: 'string',
+        default: '',
+        placeholder: '%d %b %Y',
+        description: DATE_FORMAT_HINT,
+        showWhen: { field: 'operation', values: ['now', 'format', 'add', 'subtract'] },
+      },
+    ],
+  },
+
+  json: {
+    type: 'json',
+    defaultLabel: 'JSON',
+    description: 'Parse a JSON string into data, or turn data into a JSON string.',
+    category: 'data',
+    icon: Braces,
+    keywords: 'parse stringify serialize',
+    properties: [
+      {
+        name: 'operation',
+        displayName: 'Operation',
+        type: 'options',
+        default: 'parse',
+        options: [
+          { name: 'Parse (text → data)', value: 'parse' },
+          { name: 'Stringify (data → text)', value: 'stringify' },
+        ],
+      },
+      {
+        name: 'value',
+        displayName: 'Value',
+        type: 'string',
+        default: '',
+        placeholder: "$'HTTP Request'.text or leave empty",
+        description: "Leave empty to use the previous node's output.",
+      },
+      { name: 'pretty', displayName: 'Pretty Print', type: 'boolean', default: false, showWhen: { field: 'operation', values: ['stringify'] } },
+    ],
+  },
+
+  crypto: {
+    type: 'crypto',
+    defaultLabel: 'Crypto',
+    description: 'Generate a UUID or random number, hash text, or encode and decode Base64.',
+    category: 'data',
+    icon: Fingerprint,
+    keywords: 'uuid random hash sha256 md5 base64 encode decode id',
+    properties: [
+      {
+        name: 'operation',
+        displayName: 'Operation',
+        type: 'options',
+        default: 'uuid',
+        options: [
+          { name: 'Generate UUID', value: 'uuid' },
+          { name: 'Random number', value: 'random_number' },
+          { name: 'SHA-256 hash', value: 'sha256' },
+          { name: 'SHA-1 hash', value: 'sha1' },
+          { name: 'MD5 hash', value: 'md5' },
+          { name: 'Base64 encode', value: 'base64_encode' },
+          { name: 'Base64 decode', value: 'base64_decode' },
+        ],
+      },
+      {
+        name: 'value',
+        displayName: 'Value',
+        type: 'string',
+        default: '',
+        description: "Leave empty to use the previous node's output.",
+        showWhen: { field: 'operation', values: ['sha256', 'sha1', 'md5', 'base64_encode', 'base64_decode'] },
+      },
+      { name: 'min', displayName: 'Min', type: 'number', default: 1, showWhen: { field: 'operation', values: ['random_number'] } },
+      { name: 'max', displayName: 'Max', type: 'number', default: 100, showWhen: { field: 'operation', values: ['random_number'] } },
+    ],
+  },
+
   // ─── OUTPUT ────────────────────────────────────────────────────────────────
 
   set: {
@@ -496,7 +865,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Store a value that can be referenced by downstream nodes using $ syntax.',
     category: 'output',
     icon: Settings,
-    outputCount: 1,
     properties: [
       {
         name: 'value',
@@ -515,7 +883,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Output data to the console. If no content is specified, prints the input from the previous node.',
     category: 'output',
     icon: Printer,
-    outputCount: 1,
     properties: [
       {
         name: 'content',
@@ -534,12 +901,12 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Build a string by interpolating values from other nodes using $ syntax.',
     category: 'output',
     icon: FileText,
-    outputCount: 1,
     properties: [
       {
         name: 'template',
         displayName: 'Template',
         type: 'string',
+        multiline: true,
         default: '',
         required: true,
         placeholder: "Hello $'Set Data'.name, your score is $'Calculate'.result",
@@ -556,7 +923,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Send a prompt to any LLM (OpenAI, Anthropic, Google, NVIDIA, Ollama) and get a response.',
     category: 'ai',
     icon: BrainCircuit,
-    outputCount: 1,
     properties: [
       {
         name: 'provider',
@@ -594,6 +960,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
         name: 'system_prompt',
         displayName: 'System Prompt',
         type: 'string',
+        multiline: true,
         default: '',
         placeholder: 'You are a helpful assistant...',
         description: 'Optional system prompt to set the LLM\'s behavior.',
@@ -602,6 +969,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
         name: 'prompt',
         displayName: 'User Prompt',
         type: 'string',
+        multiline: true,
         default: '',
         required: true,
         placeholder: "Explain $'Set Data'.topic in simple terms",
@@ -642,7 +1010,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Classify text into categories using an LLM. Perfect for sentiment analysis, content moderation, intent detection.',
     category: 'ai',
     icon: Tags,
-    outputCount: 1,
     properties: [
       {
         name: 'provider',
@@ -679,6 +1046,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
         name: 'text',
         displayName: 'Text to Classify',
         type: 'string',
+        multiline: true,
         default: '',
         placeholder: "$'HTTP Request'.body or paste text here",
         description: 'The text to classify. If empty, uses input from previous node.',
@@ -708,7 +1076,6 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
     description: 'Summarize long text using an LLM. Choose style and length.',
     category: 'ai',
     icon: FileSearch,
-    outputCount: 1,
     properties: [
       {
         name: 'provider',
@@ -745,6 +1112,7 @@ export const NODE_DEFINITIONS: Record<string, NodeDefinition> = {
         name: 'text',
         displayName: 'Text to Summarize',
         type: 'string',
+        multiline: true,
         default: '',
         placeholder: "$'HTTP Request'.body or paste text here",
         description: 'The text to summarize. If empty, uses input from previous node.',
@@ -805,13 +1173,60 @@ export function getDefaultParams(nodeType: string): Record<string, unknown> {
   return params;
 }
 
-/** Get all node types available for the palette */
-export function getNodeTemplates() {
-  return Object.values(NODE_DEFINITIONS).map((def) => ({
-    type: def.type,
-    label: def.defaultLabel,
-    category: def.category,
-    icon: def.icon,
-    description: def.description,
-  }));
+export function getPaletteNodes(): NodeDefinition[] {
+  return Object.values(NODE_DEFINITIONS).filter((def) => !def.hidden);
+}
+
+export function getCategory(nodeType: string): Category {
+  return NODE_DEFINITIONS[nodeType]?.category ?? (nodeType.includes('trigger') ? 'trigger' : 'action');
+}
+
+const short = (v: unknown, max = 22) => {
+  const s = typeof v === 'string' ? v : JSON.stringify(v ?? '');
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+};
+
+const optionName = (type: string, field: string, value: unknown) =>
+  NODE_DEFINITIONS[type]?.properties
+    .find((p) => p.name === field)
+    ?.options?.find((o) => o.value === value)?.name ?? String(value ?? '');
+
+/** One-line description of what a configured node will do, shown under its name. */
+export function getNodeSummary(type: string, p: Record<string, unknown>): string {
+  const op = (field = 'operation') => optionName(type, field, p[field] ?? NODE_DEFINITIONS[type]?.properties.find((x) => x.name === field)?.default);
+  switch (type) {
+    case 'http': {
+      const url = String(p.url ?? '');
+      let host = url;
+      try { host = new URL(url).host; } catch { /* keep raw */ }
+      return url ? `${p.method ?? 'GET'} ${short(host, 18)}` : 'No URL set';
+    }
+    case 'webhook': return `${p.method ?? 'POST'} ${short(p.path ?? '')}`;
+    case 'if':
+    case 'condition':
+      return p.left ? short(`${short(p.left, 10)} ${p.operator ?? '=='} ${short(p.right, 8)}`, 26) : 'Set a condition';
+    case 'switch': return `${Array.isArray(p.cases) ? p.cases.length : 0} cases`;
+    case 'delay': return `${p.seconds ?? 1}s`;
+    case 'calculate': return op();
+    case 'set': return p.value && typeof p.value === 'object' ? short(Object.keys(p.value).join(', ') || 'empty') : 'empty';
+    case 'filter': return p.field ? short(`${p.field} ${p.operator ?? '=='} ${p.value ?? ''}`) : 'Set a condition';
+    case 'sort': return p.field ? `by ${short(p.field, 14)} ${p.order === 'desc' ? '↓' : '↑'}` : 'by value';
+    case 'limit': return `${p.keep === 'last' ? 'last' : 'first'} ${p.count ?? 10}`;
+    case 'aggregate': return p.field ? `${op()} of ${short(p.field, 12)}` : op();
+    case 'text_ops':
+    case 'datetime':
+    case 'json':
+    case 'crypto':
+      return op();
+    case 'stop_error': return short(p.message || 'Stops the run');
+    case 'text_template': return short(p.template || 'Empty template');
+    case 'print': return p.content ? short(p.content) : 'Prints input';
+    case 'code': return short(p.expression || 'No expression');
+    case 'llm_chat':
+    case 'llm_classify':
+    case 'llm_summarize':
+      return short(p.model || optionName(type, 'provider', p.provider ?? 'openai'));
+    default:
+      return '';
+  }
 }

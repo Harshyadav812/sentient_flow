@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useExecutionStore } from '@/stores/executionStore';
+import { useWorkflowStore } from '@/stores/workflowStore';
 import {
   CheckCircle2,
   XCircle,
@@ -17,8 +18,18 @@ interface ExecutionPanelProps {
   onToggle: () => void;
 }
 
+function selectOnCanvas(label: string) {
+  useWorkflowStore.setState((s) => {
+    const target = s.nodes.find((n) => n.data.label === label) ?? null;
+    return {
+      selectedNode: target,
+      nodes: s.nodes.map((n) => (n.selected === (n === target) ? n : { ...n, selected: n === target })),
+    };
+  });
+}
+
 export function ExecutionPanel({ isOpen, onToggle }: ExecutionPanelProps) {
-  const [selectedNodeName, setSelectedNodeName] = useState<string | null>(null);
+  const canvasSelected = useWorkflowStore((s) => s.selectedNode?.data.label ?? null);
 
   const {
     isRunning,
@@ -38,11 +49,13 @@ export function ExecutionPanel({ isOpen, onToggle }: ExecutionPanelProps) {
     }));
   }, [nodeStatuses, nodeResults]);
 
-  // Currently selected node data
-  const selectedCurrentNode = useMemo(() => {
-    if (!selectedNodeName) return null;
-    return nodeResults[selectedNodeName] || null;
-  }, [selectedNodeName, nodeResults]);
+  // Follow the canvas selection; otherwise show the first failure, else the latest node
+  const selectedNodeName = useMemo(() => {
+    if (canvasSelected && nodeResults[canvasSelected]) return canvasSelected;
+    const names = Object.keys(nodeResults);
+    return names.find((n) => nodeResults[n].status === 'error') ?? names.at(-1) ?? null;
+  }, [canvasSelected, nodeResults]);
+  const selectedCurrentNode = selectedNodeName ? nodeResults[selectedNodeName] ?? null : null;
 
   const statusIcon = (status: string, size = 13) => {
     switch (status) {
@@ -81,7 +94,7 @@ export function ExecutionPanel({ isOpen, onToggle }: ExecutionPanelProps) {
             ) : (
               <RotateCcw size={12} />
             )}
-            Current Run
+            Last run
           </div>
 
           <div className="flex-1" />
@@ -115,7 +128,7 @@ export function ExecutionPanel({ isOpen, onToggle }: ExecutionPanelProps) {
         <div className="flex-1 flex min-h-0">
           {!hasData ? (
             <div className="flex-1 flex items-center justify-center text-zinc-600 text-[12px]">
-              Execute the workflow to see results here
+              Run the workflow to see what each node outputs
             </div>
           ) : (
             <>
@@ -124,7 +137,7 @@ export function ExecutionPanel({ isOpen, onToggle }: ExecutionPanelProps) {
                 {currentNodes.map(({ name, status }) => (
                   <button
                     key={name}
-                    onClick={() => setSelectedNodeName(name)}
+                    onClick={() => selectOnCanvas(name)}
                     className={clsx(
                       "w-full flex items-center gap-2 px-3 py-2 text-left text-[11px] transition-colors border-b border-[#2e2e33]/40",
                       selectedNodeName === name
