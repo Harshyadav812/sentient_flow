@@ -1,14 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { X, Trash2, Plus, Code, List, Settings2, SlidersHorizontal } from 'lucide-react';
 import { NODE_DEFINITIONS, validateNodeParams, type ValidationError } from '@/config/nodeDefinitions';
-import { getCredentials } from '@/lib/api';
+import { getCredentialsCached, type CredentialData } from '@/lib/api';
 import clsx from 'clsx';
 
 type PanelTab = 'params' | 'settings';
-
-// Module-level cache so credentials are fetched once per page load, not per panel open
-let cachedCredentials: { id: string; name: string; type: string }[] | null = null;
 
 export function PropertiesPanel() {
   const { nodes, settingsNodeId, setSettingsNodeId, updateNodeData, removeNode, renameNode } =
@@ -20,16 +17,15 @@ export function PropertiesPanel() {
   const [newValue, setNewValue] = useState('');
   // state to capture the name when the input is focused:
   const [originalName, setOriginalName] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<{ id: string; name: string; type: string }[]>(cachedCredentials || []);
-  const hasFetched = useRef(!!cachedCredentials);
+  const [credentials, setCredentials] = useState<CredentialData[]>([]);
 
-  // Fetch user's credentials only once per session, not on every panel open
+  // Cached in lib/api; refetched only after credentials are created or deleted
   useEffect(() => {
-    if (hasFetched.current) return;
-    hasFetched.current = true;
-    getCredentials()
-      .then((creds) => { cachedCredentials = creds; setCredentials(creds); })
-      .catch(() => setCredentials([]));
+    let active = true;
+    getCredentialsCached()
+      .then((creds) => active && setCredentials(creds))
+      .catch(() => active && setCredentials([]));
+    return () => { active = false; };
   }, []);
 
   const settingsNode = useMemo(() => nodes.find((n) => n.id === settingsNodeId), [nodes, settingsNodeId]);

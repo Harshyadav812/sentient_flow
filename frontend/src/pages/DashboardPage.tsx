@@ -2,23 +2,38 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { usePreferences } from '@/stores/preferencesStore';
 import {
   getWorkflows,
   createWorkflow,
   deleteWorkflow,
   type WorkflowData,
 } from '@/lib/api';
-import { Plus, Trash2, Upload, Loader2, Search } from 'lucide-react';
+import { formatDateTime, formatRelative, parseUTC } from '@/lib/format';
+import { Plus, Trash2, Upload } from 'lucide-react';
 import { ImportWorkflowModal } from '@/components/ImportWorkflowModal';
-import { Button } from '@/components/ui/button';
+import { EmptyState, ListSkeleton, PageContainer, PageHeader, SearchBox } from '@/components/common/PageHeader';
+import { Btn } from '@/components/common/controls';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
+
+const nodeCount = (wf: WorkflowData) => {
+  const nodes = (wf.data as { nodes?: unknown[] } | null)?.nodes;
+  return Array.isArray(nodes) ? nodes.length : 0;
+};
+
+const lastEdited = (wf: WorkflowData) => wf.updated_at || wf.created_at;
 
 export function DashboardPage() {
   const { deserializeFromPayload, setWorkflowId } = useWorkflowStore();
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<WorkflowData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<WorkflowData | null>(null);
+  const confirmBeforeDelete = usePreferences((s) => s.confirmBeforeDelete);
+  const timestampFormat = usePreferences((s) => s.timestampFormat);
 
   useEffect(() => {
     loadWorkflows();
@@ -37,6 +52,7 @@ export function DashboardPage() {
   }
 
   async function handleCreate() {
+    setIsCreating(true);
     try {
       const wf = await createWorkflow({
         name: 'New Workflow',
@@ -54,22 +70,23 @@ export function DashboardPage() {
           connections: {},
         },
       });
-      toast.success('Workflow created');
       navigate(`/canvas/${wf.id}`);
     } catch (err) {
       console.error(err);
       toast.error('Failed to create workflow');
+      setIsCreating(false);
     }
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(wf: WorkflowData) {
     try {
-      await deleteWorkflow(id);
-      setWorkflows((wfs) => wfs.filter((w) => w.id !== id));
-      toast.success('Workflow deleted');
+      await deleteWorkflow(wf.id);
+      setWorkflows((wfs) => wfs.filter((w) => w.id !== wf.id));
+      toast.success(`Deleted "${wf.name}"`);
     } catch (err) {
       console.error(err);
       toast.error('Failed to delete workflow');
+      throw err;
     }
   }
 
@@ -81,165 +98,136 @@ export function DashboardPage() {
     navigate(`/canvas/${wf.id}`);
   }
 
-  const filteredWorkflows = workflows.filter(wf =>
-    wf.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredWorkflows = workflows
+    .filter((wf) => wf.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => (parseUTC(lastEdited(b))?.getTime() ?? 0) - (parseUTC(lastEdited(a))?.getTime() ?? 0));
 
-  const nodeCount = (wf: WorkflowData) => {
-    try {
-      // @ts-expect-error wf.data typing might be too loose
-      return wf.data?.nodes?.length || 0;
-    } catch { return 0; }
-  };
+  const formatTs = timestampFormat === 'relative' ? formatRelative : formatDateTime;
 
   return (
-    <div className="min-h-full bg-[#18181b] p-6 lg:p-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
-              Workflows
-            </h1>
-            <p className="text-[13px] text-zinc-500 mt-0.5">
-              {workflows.length} workflow{workflows.length !== 1 ? 's' : ''} total
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowImport(true)}
-              className="border-[#2e2e33] bg-transparent text-zinc-400 hover:bg-white/4 hover:text-zinc-200 h-8 text-[12px]"
-            >
-              <Upload className="mr-1.5 h-3.5 w-3.5" /> Import
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleCreate}
-              className="bg-node-trigger hover:bg-accent-hover text-white h-8 text-[12px] shadow-sm"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> New Workflow
-            </Button>
-          </div>
-        </div>
+    <PageContainer>
+      <PageHeader
+        title="Workflows"
+        description={
+          isLoading ? 'Loading…' : `${workflows.length} workflow${workflows.length !== 1 ? 's' : ''}`
+        }
+        actions={
+          <>
+            <Btn variant="secondary" onClick={() => setShowImport(true)}>
+              <Upload /> Import
+            </Btn>
+            <Btn onClick={handleCreate} loading={isCreating}>
+              {!isCreating && <Plus />} New workflow
+            </Btn>
+          </>
+        }
+      />
 
-        {/* Search bar */}
-        {workflows.length > 0 && (
-          <div className="mb-5 relative">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
-            <input
-              type="text"
-              placeholder="Search workflows…"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full max-w-sm h-9 pl-9 pr-3 bg-[#1f1f23] border border-[#2e2e33] rounded-lg text-[13px] text-zinc-200 placeholder:text-zinc-500 outline-none focus:border-[#ff6d5a]/40 transition-colors"
-            />
-          </div>
-        )}
-
-        {isLoading ? (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center text-zinc-500">
-            <Loader2 className="h-6 w-6 animate-spin text-[#ff6d5a] mb-3" />
-            <p className="text-[13px]">Loading workflows…</p>
-          </div>
-        ) : workflows.length === 0 ? (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-[#2e2e33] bg-[#1f1f23]/50 p-12 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#2a2a2f] mb-4">
-              <img src="/favicon.svg" alt="Workflow Icon" className="h-7 w-7 opacity-60 grayscale" />
+      {isLoading ? (
+        <ListSkeleton />
+      ) : workflows.length === 0 ? (
+        <EmptyState
+          icon={<img src="/favicon.svg" alt="" className="h-6 w-6 opacity-70 grayscale" />}
+          title="No workflows yet"
+          description="Create your first workflow to start automating tasks, or import one from a JSON file."
+          action={
+            <div className="flex gap-2">
+              <Btn variant="secondary" onClick={() => setShowImport(true)}>
+                <Upload /> Import
+              </Btn>
+              <Btn onClick={handleCreate} loading={isCreating}>
+                {!isCreating && <Plus />} Create workflow
+              </Btn>
             </div>
-            <h3 className="text-base font-medium text-zinc-200 mb-1.5">No workflows yet</h3>
-            <p className="text-[13px] text-zinc-500 max-w-xs mb-5">
-              Create your first workflow to start automating tasks.
-            </p>
-            <Button
-              size="sm"
-              onClick={handleCreate}
-              className="bg-[#ff6d5a] hover:bg-[#e85a48] text-white h-8 text-[12px]"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Create Workflow
-            </Button>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {/* Table header */}
-            <div className="grid grid-cols-[1fr_120px_100px_80px_40px] gap-3 px-4 py-2 text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+          }
+        />
+      ) : (
+        <>
+          <SearchBox value={searchQuery} onChange={setSearchQuery} placeholder="Search workflows…" />
+
+          <div className="overflow-hidden rounded-xl border border-[#2e2e33] bg-surface">
+            <div className="hidden grid-cols-[1fr_90px_130px_40px] gap-4 border-b border-[#2e2e33] px-4 py-2.5 text-[11px] font-medium tracking-wide text-zinc-500 uppercase sm:grid">
               <span>Name</span>
-              <span>Created</span>
               <span>Nodes</span>
-              <span>ID</span>
-              <span></span>
+              <span>Last edited</span>
+              <span />
             </div>
 
-            {/* Workflow rows */}
-            {filteredWorkflows.map((wf) => (
-              <div
-                key={wf.id}
-                onClick={() => handleOpen(wf)}
-                className="group grid grid-cols-[1fr_120px_100px_80px_40px] gap-3 items-center px-4 py-3 rounded-lg cursor-pointer transition-all hover:bg-white/[0.03] border border-transparent hover:border-[#2e2e33]"
-              >
-                {/* Name */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#ff6d5a]/10">
-                    <img src="/favicon.svg" alt="Workflow Icon" className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-zinc-200 truncate">
-                      {wf.name}
-                    </div>
-                    {wf.description && (
-                      <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                        {wf.description}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Created */}
-                <div className="text-[12px] text-zinc-500">
-                  {new Date(wf.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </div>
-
-                {/* Nodes */}
-                <div className="text-[12px] text-zinc-500">
-                  {nodeCount(wf)} node{nodeCount(wf) !== 1 ? 's' : ''}
-                </div>
-
-                {/* ID */}
-                <div className="text-[11px] text-zinc-600 font-mono">
-                  {wf.id.slice(0, 6)}
-                </div>
-
-                {/* Actions */}
-                <div className="flex justify-end">
-                  <button
-                    className="h-7 w-7 flex items-center justify-center rounded-md text-zinc-600 opacity-0 group-hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(wf.id);
-                    }}
-                    title="Delete workflow"
+            <ul className="divide-y divide-[#2e2e33]">
+              {filteredWorkflows.map((wf) => (
+                <li key={wf.id}>
+                  <div
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => handleOpen(wf)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleOpen(wf)}
+                    className="group grid cursor-pointer grid-cols-[1fr_40px] items-center gap-4 px-4 py-3 transition-colors outline-none hover:bg-white/2 focus-visible:bg-white/4 sm:grid-cols-[1fr_90px_130px_40px]"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-node-trigger/10">
+                        <img src="/favicon.svg" alt="" className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-medium text-zinc-200 group-hover:text-white">
+                          {wf.name}
+                        </div>
+                        <div className="truncate text-[11px] text-zinc-500">
+                          {wf.description || (
+                            <span className="sm:hidden">
+                              {nodeCount(wf)} nodes · {formatTs(lastEdited(wf))}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
-            {filteredWorkflows.length === 0 && searchQuery && (
-              <div className="text-center py-12 text-zinc-500 text-[13px]">
-                No workflows match "{searchQuery}"
-              </div>
-            )}
+                    <div className="hidden text-[12px] text-zinc-500 tabular-nums sm:block">
+                      {nodeCount(wf)} node{nodeCount(wf) !== 1 ? 's' : ''}
+                    </div>
+
+                    <div className="hidden text-[12px] text-zinc-500 sm:block" title={formatDateTime(lastEdited(wf))}>
+                      {formatTs(lastEdited(wf))}
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 opacity-0 transition-all group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirmBeforeDelete) setPendingDelete(wf);
+                          else handleDelete(wf).catch(() => {});
+                        }}
+                        title="Delete workflow"
+                        aria-label={`Delete ${wf.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+
+              {filteredWorkflows.length === 0 && searchQuery && (
+                <li className="py-10 text-center text-[13px] text-zinc-500">No workflows match "{searchQuery}"</li>
+              )}
+            </ul>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <ImportWorkflowModal
         open={showImport}
         onClose={() => setShowImport(false)}
         onSuccess={loadWorkflows}
       />
-    </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
+        title={`Delete "${pendingDelete?.name}"?`}
+        description="The workflow and its execution history will be permanently deleted."
+        onConfirm={() => handleDelete(pendingDelete!)}
+      />
+    </PageContainer>
   );
 }

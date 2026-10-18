@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { toast } from "sonner";
+import { usePreferences } from "@/stores/preferencesStore";
+import { useWorkflowStore } from "@/stores/workflowStore";
 
 export interface NodeResult {
   status: "success" | "error" | "skipped";
@@ -34,6 +36,34 @@ const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 // This lets the HTTP stream finish normally so the backend completes execution
 // and commits the final status, while preventing stale data leaking into the UI.
 let streamGeneration = 0;
+
+/** Toast + optional desktop notification when a run ends (Settings → Notifications). */
+function notifyRunFinished(status: "success" | "failed" | null, error: string | null) {
+  const prefs = usePreferences.getState();
+  const name = useWorkflowStore.getState().workflowName || "Workflow";
+  const ok = status === "success";
+
+  if (ok && prefs.notifyOnSuccess) toast.success(`${name} executed successfully`);
+  if (!ok && prefs.notifyOnFailure) {
+    toast.error(`${name} failed`, error ? { description: error } : undefined);
+  }
+
+  if (
+    prefs.desktopNotifications &&
+    document.hidden &&
+    "Notification" in window &&
+    Notification.permission === "granted"
+  ) {
+    new Notification(ok ? "Workflow succeeded" : "Workflow failed", {
+      body: name,
+      icon: "/favicon.svg",
+    });
+  }
+}
+
+function notifyNodeError(node: string, error: string) {
+  if (usePreferences.getState().notifyOnNodeError) toast.error(`${node}: ${error}`);
+}
 
 export const useExecutionStore = create<ExecutionState>((set) => ({
   isRunning: false,
@@ -121,7 +151,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
                 },
               }));
               if (data.status === "error" && data.error) {
-                toast.error(`${data.node}: ${data.error}`);
+                notifyNodeError(data.node, data.error);
               }
             } else if (data.type === "workflow_end") {
               set({
@@ -130,7 +160,6 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
               });
             } else if (data.type === "error") {
               set({ error: data.message, overallStatus: "failed" });
-              toast.error(data.message);
             }
           } catch (e) {
             console.error("Failed to parse SSE chunk", e, line);
@@ -144,6 +173,8 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
         if (useExecutionStore.getState().overallStatus === null) {
           set({ overallStatus: "failed" });
         }
+        const { overallStatus, error } = useExecutionStore.getState();
+        notifyRunFinished(overallStatus, error);
       }
     } catch (err) {
       // Silently ignore abort errors (triggered by clear/navigation)
@@ -239,7 +270,7 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
                 },
               }));
               if (data.status === "error" && data.error) {
-                toast.error(`${data.node}: ${data.error}`);
+                notifyNodeError(data.node, data.error);
               }
             } else if (data.type === "workflow_end") {
               set({
@@ -248,7 +279,6 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
               });
             } else if (data.type === "error") {
               set({ error: data.message, overallStatus: "failed" });
-              toast.error(data.message);
             }
           } catch (e) {
             console.error("Failed to parse SSE chunk", e, line);
@@ -261,6 +291,8 @@ export const useExecutionStore = create<ExecutionState>((set) => ({
         if (useExecutionStore.getState().overallStatus === null) {
           set({ overallStatus: "failed" });
         }
+        const { overallStatus, error } = useExecutionStore.getState();
+        notifyRunFinished(overallStatus, error);
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;

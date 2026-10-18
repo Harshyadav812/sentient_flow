@@ -20,6 +20,13 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import clsx from 'clsx';
+import { usePreferences } from '@/stores/preferencesStore';
+import { formatDateTime as formatTime, formatDuration as getDuration, formatRelative } from '@/lib/format';
+import { EmptyState, ListSkeleton, PageContainer, PageHeader } from '@/components/common/PageHeader';
+import { Btn } from '@/components/common/controls';
+
+type StatusFilter = 'all' | ExecutionData['status'];
 
 export function ExecutionsPage() {
   const navigate = useNavigate();
@@ -27,6 +34,8 @@ export function ExecutionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDetail, setSelectedDetail] = useState<ExecutionDetailData | null>(null);
   const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [filter, setFilter] = useState<StatusFilter>('all');
+  const timestampFormat = usePreferences((s) => s.timestampFormat);
 
   useEffect(() => {
     loadExecutions();
@@ -75,93 +84,70 @@ export function ExecutionsPage() {
     pending: { color: 'text-zinc-500', label: 'Pending' },
   };
 
-  // Helper functions remain same
-  const parseUTC = (dateStr: string | null) => {
-    if (!dateStr) return null;
-    return new Date(dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr + 'Z');
-  };
+  const formatStarted = (exec: ExecutionData) =>
+    timestampFormat === 'relative'
+      ? formatRelative(exec.started_at || exec.created_at)
+      : formatTime(exec.started_at || exec.created_at);
 
-  const formatTime = (dateStr: string | null) => {
-    const d = parseUTC(dateStr);
-    if (!d) return '—';
-    return d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-  };
-
-  const getDuration = (start: string | null, end: string | null) => {
-    const s = parseUTC(start);
-    const e = parseUTC(end);
-    if (!s || !e) return '—';
-    const ms = e.getTime() - s.getTime();
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
-  };
-
-  const getRelativeTime = (dateStr: string) => {
-    const d = parseUTC(dateStr);
-    if (!d) return '—';
-    const diff = Date.now() - d.getTime();
-    const mins = Math.max(0, Math.floor(diff / 60000));
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
+  const visible = filter === 'all' ? executions : executions.filter((e) => e.status === filter);
+  const counts = executions.reduce<Record<string, number>>((acc, e) => {
+    acc[e.status] = (acc[e.status] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="min-h-full bg-[#18181b] p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-zinc-100">
-              Executions
-            </h1>
-            <p className="text-[13px] text-zinc-500 mt-0.5">
-              {executions.length} execution{executions.length !== 1 ? 's' : ''} total
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadExecutions}
-            disabled={isLoading}
-            className="border-[#2e2e33] bg-transparent text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200 h-8 text-[12px]"
-          >
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        </div>
+    <PageContainer width="max-w-5xl">
+        <PageHeader
+          title="Executions"
+          description={isLoading ? 'Loading…' : `${executions.length} execution${executions.length !== 1 ? 's' : ''} total`}
+          actions={
+            <Btn variant="secondary" onClick={loadExecutions} disabled={isLoading}>
+              <RefreshCw className={isLoading ? 'animate-spin' : ''} />
+              Refresh
+            </Btn>
+          }
+        />
 
         {/* Loading */}
-        {isLoading && (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center text-zinc-500">
-            <Loader2 className="h-6 w-6 animate-spin text-[#ff6d5a] mb-3" />
-            <p className="text-[13px]">Loading executions…</p>
-          </div>
-        )}
+        {isLoading && <ListSkeleton rows={5} />}
 
         {/* Empty */}
         {!isLoading && executions.length === 0 && (
-          <div className="flex min-h-[40vh] flex-col items-center justify-center rounded-xl border border-dashed border-[#2e2e33] bg-[#1f1f23]/50 p-12 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-[#2a2a2f] mb-4">
-              <History className="h-7 w-7 text-zinc-500" />
-            </div>
-            <h3 className="text-base font-medium text-zinc-200 mb-1.5">No executions yet</h3>
-            <p className="text-[13px] text-zinc-500 max-w-xs">
-              Run a workflow to see its execution history here.
-            </p>
+          <EmptyState
+            icon={<History size={22} />}
+            title="No executions yet"
+            description="Run a workflow to see its execution history here."
+          />
+        )}
+
+        {/* Status filter */}
+        {!isLoading && executions.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by status">
+            {(['all', 'completed', 'failed', 'running'] as const).map((f) => (
+              <button
+                key={f}
+                role="tab"
+                aria-selected={filter === f}
+                onClick={() => setFilter(f)}
+                className={clsx(
+                  'h-7 rounded-full border px-3 text-[12px] transition-colors',
+                  filter === f
+                    ? 'border-node-trigger/40 bg-node-trigger/10 text-zinc-100'
+                    : 'border-[#2e2e33] text-zinc-400 hover:text-zinc-200'
+                )}
+              >
+                {f === 'all' ? 'All' : statusConfig[f].label}
+                <span className="ml-1.5 text-zinc-500 tabular-nums">
+                  {f === 'all' ? executions.length : counts[f] || 0}
+                </span>
+              </button>
+            ))}
           </div>
         )}
 
         {/* Execution table */}
         {!isLoading && executions.length > 0 && (
-          <div className="rounded-xl border border-[#2e2e33] bg-[#1f1f23] overflow-hidden">
+          <div className="rounded-xl border border-[#2e2e33] bg-surface overflow-hidden">
             {/* Table header */}
             <div className="grid grid-cols-[100px_1fr_120px_80px_32px] gap-3 px-4 py-2.5 border-b border-[#2e2e33] text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
               <span>Status</span>
@@ -173,7 +159,10 @@ export function ExecutionsPage() {
 
             {/* Rows */}
             <div className="divide-y divide-[#2e2e33]">
-              {executions.map((exec) => {
+              {visible.length === 0 && (
+                <div className="py-10 text-center text-[13px] text-zinc-500">No executions with this status</div>
+              )}
+              {visible.map((exec) => {
                 const sc = statusConfig[exec.status];
                 const isSelected = selectedDetail?.id === exec.id;
 
@@ -210,7 +199,7 @@ export function ExecutionsPage() {
 
                       {/* Timestamp */}
                       <div className="text-zinc-500 text-[11px]">
-                        {getRelativeTime(exec.started_at || exec.created_at)}
+                        {formatStarted(exec)}
                       </div>
 
                       {/* Duration */}
@@ -323,7 +312,6 @@ export function ExecutionsPage() {
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </PageContainer>
   );
 }

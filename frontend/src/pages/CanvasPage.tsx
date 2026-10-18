@@ -21,6 +21,7 @@ import {
   type NodeData,
 } from '@/stores/workflowStore';
 import { useExecutionStore } from '@/stores/executionStore';
+import { usePreferences } from '@/stores/preferencesStore';
 import { updateWorkflow, getWorkflow } from '@/lib/api';
 import { getDefaultParams, NODE_DEFINITIONS } from '@/config/nodeDefinitions';
 import { validateWorkflow, type WorkflowError } from '@/lib/validateWorkflow';
@@ -53,7 +54,12 @@ export function CanvasPage() {
   const navigate = useNavigate();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
-  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(
+    () => usePreferences.getState().openPaletteByDefault
+  );
+  const showMinimap = usePreferences((s) => s.showMinimap);
+  const showGrid = usePreferences((s) => s.showGrid);
+  const snapToGrid = usePreferences((s) => s.snapToGrid);
   const [isExecutionPanelOpen, setIsExecutionPanelOpen] = useState(false);
   const [validationErrors, setValidationErrors] = useState<WorkflowError[]>([]);
   const [showErrors, setShowErrors] = useState(false);
@@ -381,26 +387,30 @@ export function CanvasPage() {
                 style: { stroke: '#3a3a40', strokeWidth: 1.5 },
               }}
               deleteKeyCode={['Backspace', 'Delete']}
+              snapToGrid={snapToGrid}
+              snapGrid={[24, 24]}
               fitView
               fitViewOptions={{ maxZoom: 1 }}
               proOptions={{ hideAttribution: true }}
               className="n8n-canvas"
               colorMode="dark"
             >
-              <Background gap={24} size={1.5} color="#27272a" />
+              {showGrid && <Background gap={24} size={1.5} color="#2c2c31" />}
               <Controls
                 className="n8n-controls"
                 position="bottom-left"
                 showInteractive={false}
               />
-              <MiniMap
-                nodeColor={() => '#3a3a40'}
-                maskColor="rgba(24,24,27,0.85)"
-                className="n8n-minimap"
-                position="bottom-right"
-                pannable
-                zoomable
-              />
+              {showMinimap && (
+                <MiniMap
+                  nodeColor={() => '#3a3a40'}
+                  maskColor="rgba(24,24,27,0.85)"
+                  className="n8n-minimap"
+                  position="bottom-right"
+                  pannable
+                  zoomable
+                />
+              )}
             </ReactFlow>
 
             {/* Properties Panel — slides over canvas from right */}

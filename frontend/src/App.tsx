@@ -7,7 +7,11 @@ import { DashboardPage } from '@/pages/DashboardPage';
 import { CanvasPage } from '@/pages/CanvasPage';
 import { ExecutionsPage } from '@/pages/ExecutionsPage';
 import { CredentialsPage } from '@/pages/CredentialsPage';
-import { SettingsPage } from '@/pages/SettingsPage';
+import { SettingsLayout } from '@/pages/settings/SettingsLayout';
+import { AccountSettings } from '@/pages/settings/AccountSettings';
+import { SecuritySettings } from '@/pages/settings/SecuritySettings';
+import { NotificationSettings } from '@/pages/settings/NotificationSettings';
+import { GeneralSettings } from '@/pages/settings/GeneralSettings';
 import { ReactFlowProvider } from '@xyflow/react';
 import { AppLayout } from '@/components/layout/AppLayout';
 
@@ -52,7 +56,14 @@ export default function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/executions" element={<ExecutionsPage />} />
           <Route path="/credentials" element={<CredentialsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="account" replace />} />
+            <Route path="account" element={<AccountSettings />} />
+            <Route path="security" element={<SecuritySettings />} />
+            <Route path="notifications" element={<NotificationSettings />} />
+            <Route path="general" element={<GeneralSettings />} />
+            <Route path="*" element={<Navigate to="account" replace />} />
+          </Route>
           <Route
             path="/canvas/:id"
             element={
@@ -62,6 +73,7 @@ export default function App() {
             }
           />
         </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

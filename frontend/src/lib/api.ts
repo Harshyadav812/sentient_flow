@@ -58,7 +58,21 @@ export async function login(email: string, password: string) {
 
     throw new Error(errorMessage);
   }
-  return res.json() as Promise<{ access_token: string; token_type: string }>;
+  return res.json() as Promise<LoginResponse>;
+}
+
+export interface LoginResponse {
+  access_token: string | null;
+  token_type: string;
+  requires_2fa: boolean;
+  challenge_token: string | null;
+}
+
+export async function loginTwoFactor(challengeToken: string, code: string) {
+  return request<{ access_token: string; token_type: string }>('/auth/login/2fa', {
+    method: 'POST',
+    body: JSON.stringify({ challenge_token: challengeToken, code }),
+  });
 }
 
 export async function register(email: string, password: string) {
@@ -68,8 +82,56 @@ export async function register(email: string, password: string) {
   });
 }
 
+export interface UserData {
+  id: string;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  totp_enabled: boolean;
+  created_at: string | null;
+}
+
 export async function getMe() {
-  return request<{ id: string; email: string }>('/auth/me');
+  return request<UserData>('/auth/me');
+}
+
+export async function updateMe(payload: { full_name?: string; email?: string; current_password?: string }) {
+  return request<UserData>('/auth/me', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return request<{ ok: boolean }>('/auth/me/password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
+export async function deleteAccount(password: string) {
+  return request<{ ok: boolean }>('/auth/me', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function setupTwoFactor() {
+  return request<{ secret: string; otpauth_uri: string }>('/auth/2fa/setup', { method: 'POST' });
+}
+
+export async function enableTwoFactor(code: string) {
+  return request<UserData>('/auth/2fa/enable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function disableTwoFactor(password: string, code: string) {
+  return request<UserData>('/auth/2fa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ password, code }),
+  });
 }
 
 // Workflows
@@ -133,19 +195,44 @@ export async function runWorkflowById(id: string) {
 }
 
 // Credentials
+export interface CredentialData {
+  id: string;
+  name: string;
+  type: string;
+  created_at: string;
+}
+
 export async function getCredentials() {
-  return request<{ id: string; name: string; type: string }[]>('/credentials/');
+  return request<CredentialData[]>('/credentials/');
+}
+
+// Shared cache for the node credential dropdown; invalidated on create/delete
+// so new credentials show up in the editor without a page reload.
+let credentialsCache: Promise<CredentialData[]> | null = null;
+
+export function getCredentialsCached() {
+  if (!credentialsCache) {
+    credentialsCache = getCredentials().catch((err) => {
+      credentialsCache = null;
+      throw err;
+    });
+  }
+  return credentialsCache;
 }
 
 export async function createCredential(payload: { name: string; type: string; data: Record<string, unknown> }) {
-  return request<{ id: string; name: string; type: string }>('/credentials/', {
+  const cred = await request<CredentialData>('/credentials/', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+  credentialsCache = null;
+  return cred;
 }
 
 export async function deleteCredential(id: string) {
-  return request(`/credentials/${id}`, { method: 'DELETE' });
+  const res = await request(`/credentials/${id}`, { method: 'DELETE' });
+  credentialsCache = null;
+  return res;
 }
 
 // Executions
